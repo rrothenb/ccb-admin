@@ -1,0 +1,37 @@
+{
+  "name": "ccb-admin",
+  "version": "1.0.0",
+  "description": "Library management system built on Google Sheets + Apps Script",
+  "scripts": {
+    "clean": "rm -rf dist",
+    "copy:html": "cp src/ui/html/*.html dist/",
+    "copy:manifest": "cp appsscript.json dist/",
+    "build": "npm run clean && tsc && npm run copy:html && npm run copy:manifest",
+    "watch": "tsc --watch",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint src/**/*.ts",
+    "push": "npm run build && clasp push",
+    "deploy": "npm run build && clasp push && clasp deploy",
+    "open": "clasp open",
+    "logs": "clasp logs"
+  },
+  "devDependencies": {
+    "@google/clasp": "^2.4.2",
+    "@types/google-apps-script": "^1.0.83",
+    "@types/jest": "^29.5.12",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2",
+    "typescript": "^5.4.0"
+  },
+  "keywords": [
+    "google-apps-script",
+    "library-management",
+    "google-sheets"
+  ],
+  "license": "MIT"
+}

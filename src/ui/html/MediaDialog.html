@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <?!= include('Styles'); ?>
+  </head>
+  <body>
+    <div class="sidebar-container">
+      <form id="media-form">
+        <input type="hidden" id="media-id" value="<?= media ? media.id : '' ?>">
+
+        <div class="form-group">
+          <label for="title">Title *</label>
+          <input type="text" id="title" name="title" required
+                 value="<?= media ? media.title : '' ?>">
+        </div>
+
+        <div class="form-group">
+          <label for="author">Author / Creator *</label>
+          <input type="text" id="author" name="author" required
+                 value="<?= media ? media.author : '' ?>">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="type">Type</label>
+            <select id="type" name="type">
+              <option value="book" <?= media && media.type === 'book' ? 'selected' : '' ?>>Book</option>
+              <option value="dvd" <?= media && media.type === 'dvd' ? 'selected' : '' ?>>DVD</option>
+              <option value="magazine" <?= media && media.type === 'magazine' ? 'selected' : '' ?>>Magazine</option>
+              <option value="audiobook" <?= media && media.type === 'audiobook' ? 'selected' : '' ?>>Audiobook</option>
+              <option value="other" <?= media && media.type === 'other' ? 'selected' : '' ?>>Other</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="isbn">ISBN / Barcode</label>
+            <input type="text" id="isbn" name="isbn"
+                   value="<?= media ? media.isbn : '' ?>">
+          </div>
+        </div>
+
+        <? if (isEdit) { ?>
+        <div class="form-group">
+          <label for="status">Status</label>
+          <select id="status" name="status">
+            <option value="available" <?= media && media.status === 'available' ? 'selected' : '' ?>>Available</option>
+            <option value="on-loan" <?= media && media.status === 'on-loan' ? 'selected' : '' ?>>On Loan</option>
+            <option value="lost" <?= media && media.status === 'lost' ? 'selected' : '' ?>>Lost</option>
+            <option value="damaged" <?= media && media.status === 'damaged' ? 'selected' : '' ?>>Damaged</option>
+            <option value="retired" <?= media && media.status === 'retired' ? 'selected' : '' ?>>Retired</option>
+          </select>
+        </div>
+        <? } ?>
+
+        <div class="form-group">
+          <label for="notes">Notes</label>
+          <textarea id="notes" name="notes" rows="3"><?= media ? media.notes : '' ?></textarea>
+        </div>
+
+        <div class="form-row">
+          <button type="submit" class="btn btn-primary">
+            <?= isEdit ? 'Save Changes' : 'Add Media' ?>
+          </button>
+          <button type="button" class="btn btn-secondary" onclick="google.script.host.close()">
+            Cancel
+          </button>
+        </div>
+      </form>
+
+      <div id="status-area" class="status-area"></div>
+    </div>
+
+    <script>
+      function showStatus(message, type) {
+        const statusArea = document.getElementById('status-area');
+        statusArea.textContent = message;
+        statusArea.className = 'status-area ' + type;
+      }
+
+      document.getElementById('media-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        showStatus('Saving...', 'loading');
+
+        const data = {
+          id: document.getElementById('media-id').value || undefined,
+          title: document.getElementById('title').value,
+          author: document.getElementById('author').value,
+          type: document.getElementById('type').value,
+          isbn: document.getElementById('isbn').value,
+          notes: document.getElementById('notes').value
+        };
+
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.success) {
+              showStatus('Saved successfully!', 'success');
+              setTimeout(function() {
+                google.script.host.close();
+              }, 1000);
+            } else {
+              showStatus(result.error || 'Save failed', 'error');
+            }
+          })
+          .withFailureHandler(function(error) {
+            showStatus(error.message || 'An error occurred', 'error');
+          })
+          .saveMedia(data);
+      });
+    </script>
+  </body>
+</html>

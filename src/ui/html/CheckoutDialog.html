@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <?!= include('Styles'); ?>
+    <style>
+      .autocomplete-container {
+        position: relative;
+      }
+      .autocomplete-results {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        max-height: 150px;
+        overflow-y: auto;
+        background: white;
+        border: 1px solid #d1d5db;
+        border-top: none;
+        border-radius: 0 0 6px 6px;
+        z-index: 100;
+        display: none;
+      }
+      .autocomplete-results.active {
+        display: block;
+      }
+      .autocomplete-item {
+        padding: 8px 12px;
+        cursor: pointer;
+        border-bottom: 1px solid #f3f4f6;
+      }
+      .autocomplete-item:hover {
+        background-color: #f3f4f6;
+      }
+      .autocomplete-item .primary {
+        font-weight: 500;
+      }
+      .autocomplete-item .secondary {
+        font-size: 12px;
+        color: #6b7280;
+      }
+      .selected-item {
+        padding: 8px 12px;
+        background: #dbeafe;
+        border-radius: 6px;
+        margin-top: 4px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .selected-item .remove {
+        cursor: pointer;
+        color: #6b7280;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sidebar-container">
+      <form id="checkout-form">
+        <!-- Borrower Selection -->
+        <div class="form-group">
+          <label for="borrower-search">Borrower *</label>
+          <div class="autocomplete-container">
+            <input type="text" id="borrower-search" placeholder="Search by name or email..."
+                   autocomplete="off">
+            <div id="borrower-results" class="autocomplete-results"></div>
+          </div>
+          <div id="selected-borrower" class="selected-item" style="display: none;">
+            <span id="borrower-name"></span>
+            <span class="remove" onclick="clearBorrower()">x</span>
+          </div>
+          <input type="hidden" id="borrower-id" required>
+        </div>
+
+        <!-- Media Selection -->
+        <div class="form-group">
+          <label for="media-search">Media Item *</label>
+          <div class="autocomplete-container">
+            <input type="text" id="media-search" placeholder="Search by title, author, or ISBN..."
+                   autocomplete="off">
+            <div id="media-results" class="autocomplete-results"></div>
+          </div>
+          <div id="selected-media" class="selected-item" style="display: none;">
+            <span id="media-title"></span>
+            <span class="remove" onclick="clearMedia()">x</span>
+          </div>
+          <input type="hidden" id="media-id" required>
+        </div>
+
+        <!-- Loan Duration -->
+        <div class="form-group">
+          <label for="loan-days">Loan Period (days)</label>
+          <input type="number" id="loan-days" value="14" min="1" max="90">
+        </div>
+
+        <div class="form-row">
+          <button type="submit" class="btn btn-primary">Complete Checkout</button>
+          <button type="button" class="btn btn-secondary" onclick="google.script.host.close()">
+            Cancel
+          </button>
+        </div>
+      </form>
+
+      <div id="status-area" class="status-area"></div>
+    </div>
+
+    <script>
+      let borrowers = [];
+      let mediaItems = [];
+
+      function showStatus(message, type) {
+        const statusArea = document.getElementById('status-area');
+        statusArea.textContent = message;
+        statusArea.className = 'status-area ' + type;
+      }
+
+      // Load data on start
+      document.addEventListener('DOMContentLoaded', function() {
+        google.script.run
+          .withSuccessHandler(function(data) { borrowers = data; })
+          .getAllBorrowers();
+
+        google.script.run
+          .withSuccessHandler(function(data) { mediaItems = data; })
+          .getAvailableMedia();
+      });
+
+      // Borrower autocomplete
+      const borrowerSearch = document.getElementById('borrower-search');
+      const borrowerResults = document.getElementById('borrower-results');
+
+      borrowerSearch.addEventListener('input', function() {
+        const query = this.value.toLowerCase();
+        if (query.length < 2) {
+          borrowerResults.classList.remove('active');
+          return;
+        }
+
+        const matches = borrowers.filter(b =>
+          b.name.toLowerCase().includes(query) ||
+          b.email.toLowerCase().includes(query)
+        ).slice(0, 5);
+
+        if (matches.length === 0) {
+          borrowerResults.classList.remove('active');
+          return;
+        }
+
+        borrowerResults.innerHTML = matches.map(b =>
+          '<div class="autocomplete-item" onclick="selectBorrower(\'' + b.id + '\', \'' + b.name.replace(/'/g, "\\'") + '\')">' +
+            '<div class="primary">' + b.name + '</div>' +
+            '<div class="secondary">' + b.email + '</div>' +
+          '</div>'
+        ).join('');
+        borrowerResults.classList.add('active');
+      });
+
+      function selectBorrower(id, name) {
+        document.getElementById('borrower-id').value = id;
+        document.getElementById('borrower-name').textContent = name;
+        document.getElementById('selected-borrower').style.display = 'flex';
+        document.getElementById('borrower-search').style.display = 'none';
+        borrowerResults.classList.remove('active');
+      }
+
+      function clearBorrower() {
+        document.getElementById('borrower-id').value = '';
+        document.getElementById('selected-borrower').style.display = 'none';
+        document.getElementById('borrower-search').style.display = 'block';
+        document.getElementById('borrower-search').value = '';
+      }
+
+      // Media autocomplete
+      const mediaSearch = document.getElementById('media-search');
+      const mediaResults = document.getElementById('media-results');
+
+      mediaSearch.addEventListener('input', function() {
+        const query = this.value.toLowerCase();
+        if (query.length < 2) {
+          mediaResults.classList.remove('active');
+          return;
+        }
+
+        const matches = mediaItems.filter(m =>
+          m.title.toLowerCase().includes(query) ||
+          m.author.toLowerCase().includes(query) ||
+          m.isbn.toLowerCase().includes(query)
+        ).slice(0, 5);
+
+        if (matches.length === 0) {
+          mediaResults.classList.remove('active');
+          return;
+        }
+
+        mediaResults.innerHTML = matches.map(m =>
+          '<div class="autocomplete-item" onclick="selectMedia(\'' + m.id + '\', \'' + m.title.replace(/'/g, "\\'") + '\')">' +
+            '<div class="primary">' + m.title + '</div>' +
+            '<div class="secondary">' + m.author + ' (' + m.type + ')</div>' +
+          '</div>'
+        ).join('');
+        mediaResults.classList.add('active');
+      });
+
+      function selectMedia(id, title) {
+        document.getElementById('media-id').value = id;
+        document.getElementById('media-title').textContent = title;
+        document.getElementById('selected-media').style.display = 'flex';
+        document.getElementById('media-search').style.display = 'none';
+        mediaResults.classList.remove('active');
+      }
+
+      function clearMedia() {
+        document.getElementById('media-id').value = '';
+        document.getElementById('selected-media').style.display = 'none';
+        document.getElementById('media-search').style.display = 'block';
+        document.getElementById('media-search').value = '';
+      }
+
+      // Close dropdowns when clicking outside
+      document.addEventListener('click', function(e) {
+        if (!e.target.closest('.autocomplete-container')) {
+          borrowerResults.classList.remove('active');
+          mediaResults.classList.remove('active');
+        }
+      });
+
+      // Form submission
+      document.getElementById('checkout-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const borrowerId = document.getElementById('borrower-id').value;
+        const mediaId = document.getElementById('media-id').value;
+
+        if (!borrowerId || !mediaId) {
+          showStatus('Please select a borrower and media item', 'error');
+          return;
+        }
+
+        showStatus('Processing checkout...', 'loading');
+
+        const data = {
+          borrowerId: borrowerId,
+          mediaId: mediaId,
+          loanDays: parseInt(document.getElementById('loan-days').value) || 14
+        };
+
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.success) {
+              showStatus('Checkout complete!', 'success');
+              setTimeout(function() {
+                google.script.host.close();
+              }, 1000);
+            } else {
+              showStatus(result.error || 'Checkout failed', 'error');
+            }
+          })
+          .withFailureHandler(function(error) {
+            showStatus(error.message || 'An error occurred', 'error');
+          })
+          .processCheckout(data);
+      });
+    </script>
+  </body>
+</html>
