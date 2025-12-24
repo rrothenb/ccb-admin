@@ -15,18 +15,20 @@ Chosen because:
 
 ## Architecture
 
-### Two-Spreadsheet Model
+### Four-Spreadsheet Model
 
-| Master Sheet (Admin Only) | Volunteer Sheet (Shared) |
-|---------------------------|--------------------------|
-| Full historical data | Current/active records via `IMPORTRANGE` |
-| All tabs | Only operational tabs |
-| Raw data, config, audit logs | Clean, simplified views |
-| Source of truth | Read-only views + script-mediated writes |
+| Spreadsheet | Purpose | Apps Script |
+|-------------|---------|-------------|
+| **Borrowers** | Master data for library members | No (passive) |
+| **Media** | Master data for books, DVDs, etc. | No (passive) |
+| **Loans** | Master data for loan records | No (passive) |
+| **Hub** | Volunteer interface with linked views | Yes |
 
-- Volunteers don't need access to master sheet
-- `IMPORTRANGE` authorized once by admin, then data flows through
-- Apps Script writes back to master sheet on their behalf
+- Master spreadsheets are passive data stores (no scripts)
+- Hub uses `IMPORTRANGE` to display data from the three masters
+- Apps Script in Hub writes back to master spreadsheets via `SpreadsheetApp.openById()`
+- Auto-discovery: Script finds masters by name (e.g., "Borrowers", "Media-v2") in Drive
+- Volunteers only need access to Hub; script accesses masters on their behalf
 
 ### User Interface
 
@@ -37,9 +39,11 @@ Chosen because:
 ### Authentication & Roles
 
 - Leverage Google's built-in sharing (specific accounts only, not "anyone with link")
-- Volunteers tab in master sheet defines roles (Admin, Desk Volunteer, Read Only)
-- Script checks `Session.getActiveUser().getEmail()` against roles
-- Role determines which menu items and actions are available
+- *(Planned)* Volunteers tab in master sheet defines roles (Admin, Desk Volunteer, Read Only)
+- *(Planned)* Script checks `Session.getActiveUser().getEmail()` against roles
+- *(Planned)* Role determines which menu items and actions are available
+
+> **Note:** Role-based access is deferred for initial MVP. Currently relies on Google Sheets sharing permissions.
 
 ## Development Workflow
 
@@ -75,15 +79,17 @@ clasp push   # deploy changes
 - Current "one account owns everything" setup works for MVP
 
 ## Entities to Manage
-- Members/Borrowers
-- Books/Media
-- Loans
+
+### MVP (Implemented)
+- **Borrowers** - Library members (id, name, email, phone, status, joinDate, notes)
+- **Media** - Books, DVDs, etc. (id, title, author, type, isbn, status, notes)
+- **Loans** - Checkout records (id, borrowerId, mediaId, checkoutDate, dueDate, returnDate, status)
+
+### Future
 - Classes
 - Teachers
 - Volunteers
 - Payments
-
-*(Specific workflows and priorities TBD)*
 
 ## Example: Loan Checkout Flow
 1. Volunteer opens Loans sheet
@@ -98,6 +104,6 @@ clasp push   # deploy changes
 6. Volunteer sheet view updates automatically
 
 ## Open Questions
-- Which entities are essential for MVP vs. nice-to-have?
+- ~~Which entities are essential for MVP vs. nice-to-have?~~ → Borrowers, Media, Loans for MVP
 - What are the current pain points with loan tracking?
-- Specific fields needed for each entity?
+- ~~Specific fields needed for each entity?~~ → Defined above in Entities section
