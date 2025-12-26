@@ -27,16 +27,22 @@ The Hub spreadsheet uses `IMPORTRANGE` to display data from the three master spr
 ## Quick Start
 
 ```bash
-# Install dependencies
+# 1. Install dependencies
 npm install
 
-# Login to Google Apps Script
+# 2. Login to Google Apps Script
 npx clasp login
 
-# Create a new Apps Script project (creates .clasp.json)
-npx clasp create --type standalone --title "Library Manager"
+# 3. Create 3 master spreadsheets in Google Drive
+#    Named: "Borrowers", "Media", "Loans"
 
-# Build and deploy
+# 4. Auto-create the Hub spreadsheet
+npm run setup:hub
+
+# 5. Create Apps Script project (use Hub ID from step 4)
+npx clasp create --type sheets --title "Library Manager" --parentId YOUR_HUB_SPREADSHEET_ID
+
+# 6. Build and deploy
 npm run push
 ```
 
