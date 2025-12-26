@@ -33,6 +33,9 @@ npm install
 # Login to Google Apps Script
 npx clasp login
 
+# Create a new Apps Script project (creates .clasp.json)
+npx clasp create --type standalone --title "Library Manager"
+
 # Build and deploy
 npm run push
 ```
