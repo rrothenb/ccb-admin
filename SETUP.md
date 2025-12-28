@@ -195,8 +195,6 @@ ccb-admin/
 │   │   └── validation.ts
 │   ├── test/            # Test setup and mocks
 │   └── gas-entry.ts     # Apps Script entry points
-├── scripts/             # Setup and automation scripts
-│   └── setup-hub.ts     # Automated Hub spreadsheet creation
 ├── dist/                # Compiled output (pushed to GAS)
 ├── package.json
 ├── tsconfig.json

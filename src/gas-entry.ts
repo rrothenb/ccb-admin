@@ -1,12 +1,10 @@
 /**
- * Google Apps Script entry points
+ * Google Apps Script entry points for Web App
  *
  * This file exposes all functions that need to be accessible from
- * the Google Apps Script runtime (menus, dialogs, triggers, etc.)
+ * the Google Apps Script runtime and client-side JavaScript.
  *
  * Note: In GAS, all functions must be in the global scope.
- * TypeScript modules are compiled but the exports need to be
- * re-exported here as global functions.
  */
 
 import {
@@ -15,126 +13,75 @@ import {
   clearMasterConfig,
 } from './services/discovery';
 
-import {
-  showContextSidebar,
-  getSidebarContext,
-  include,
-} from './ui/sidebar';
+import { doGet, getAppContext, include, setHubSpreadsheetId, getHubSpreadsheetId } from './ui/webapp';
 
 import { getBorrowerService } from './services/borrowers';
 import { getMediaService } from './services/media';
 import { getLoanService } from './services/loans';
 
 // ============================================================================
-// TRIGGERS & MENU
+// WEB APP ENTRY POINT
 // ============================================================================
 
-/**
- * Runs when the spreadsheet is opened
- * Creates the custom menu
- */
-function onOpen(): void {
-  const ui = SpreadsheetApp.getUi();
-
-  ui.createMenu('Library Manager')
-    .addItem('Open Sidebar', 'showContextSidebar')
-    .addSeparator()
-    .addSubMenu(
-      ui.createMenu('Setup')
-        .addItem('Discover Master Spreadsheets', 'runDiscovery')
-        .addItem('View Configuration', 'showConfig')
-        .addItem('Clear Configuration', 'clearConfig')
-    )
-    .addSeparator()
-    .addSubMenu(
-      ui.createMenu('Maintenance')
-        .addItem('Update Overdue Statuses', 'updateOverdueStatuses')
-        .addItem('Initialize Headers', 'initializeAllHeaders')
-    )
-    .addToUi();
-
-  // Auto-show sidebar
-  showContextSidebar();
-}
-
-/**
- * Runs when the spreadsheet is installed (first use)
- */
-function onInstall(): void {
-  onOpen();
-}
+// doGet is imported from webapp.ts and exposed globally below
 
 // ============================================================================
-// SETUP FUNCTIONS
+// SETUP FUNCTIONS (run from Apps Script editor)
 // ============================================================================
 
 /**
  * Runs the master spreadsheet discovery process
+ * Run this from the Apps Script editor after initial deployment
  */
 function runDiscovery(): void {
-  const ui = SpreadsheetApp.getUi();
-
   const result = discoverAllMasterSpreadsheets();
 
   if (result.success && result.data) {
-    const found = result.data
-      .map((r) => `- ${r.sheetName}: "${r.spreadsheetName}"`)
-      .join('\n');
-
-    let message = `Discovery complete!\n\nFound:\n${found}`;
+    const found = result.data.map((r) => `- ${r.sheetName}: "${r.spreadsheetName}"`).join('\n');
+    Logger.log(`Discovery complete!\n\nFound:\n${found}`);
     if (result.error) {
-      message += `\n\nWarnings:\n${result.error}`;
+      Logger.log(`Warnings:\n${result.error}`);
     }
-
-    ui.alert('Discovery Complete', message, ui.ButtonSet.OK);
   } else {
-    ui.alert('Discovery Failed', result.error || 'Unknown error', ui.ButtonSet.OK);
+    Logger.log(`Discovery Failed: ${result.error || 'Unknown error'}`);
   }
 }
 
 /**
- * Shows the current configuration
+ * Shows the current configuration in logs
  */
 function showConfig(): void {
-  const ui = SpreadsheetApp.getUi();
   const config = getMasterConfig();
 
   if (!config) {
-    ui.alert(
-      'No Configuration',
-      'No master spreadsheets configured. Run "Discover Master Spreadsheets" first.',
-      ui.ButtonSet.OK
-    );
+    Logger.log('No Configuration - No master spreadsheets configured. Run runDiscovery() first.');
     return;
   }
 
-  const message = `Current Configuration:
-
+  Logger.log(`Current Configuration:
 Borrowers ID: ${config.borrowersId || '(not set)'}
 Media ID: ${config.mediaId || '(not set)'}
 Loans ID: ${config.loansId || '(not set)'}
-
-Last Discovery: ${config.lastDiscoveryDate || '(never)'}`;
-
-  ui.alert('Configuration', message, ui.ButtonSet.OK);
+Hub ID: ${getHubSpreadsheetId() || '(not set)'}
+Last Discovery: ${config.lastDiscoveryDate || '(never)'}`);
 }
 
 /**
  * Clears the current configuration
  */
 function clearConfig(): void {
-  const ui = SpreadsheetApp.getUi();
+  clearMasterConfig();
+  Logger.log('Configuration cleared.');
+}
 
-  const response = ui.alert(
-    'Clear Configuration',
-    'Are you sure you want to clear the master spreadsheet configuration?',
-    ui.ButtonSet.YES_NO
-  );
-
-  if (response === ui.Button.YES) {
-    clearMasterConfig();
-    ui.alert('Configuration Cleared', 'Configuration has been cleared.', ui.ButtonSet.OK);
-  }
+/**
+ * Sets the Hub spreadsheet ID for access control
+ * Run this from the Apps Script editor:
+ *   setHubId('your-spreadsheet-id-here')
+ */
+function setHubId(id: string): void {
+  setHubSpreadsheetId(id);
+  Logger.log(`Hub ID set to: ${id}`);
 }
 
 // ============================================================================
@@ -144,20 +91,16 @@ function clearConfig(): void {
 /**
  * Updates overdue loan statuses
  */
-function updateOverdueStatuses(): void {
-  const ui = SpreadsheetApp.getUi();
+function updateOverdueStatuses(): { updated: number; error?: string } {
   const loanService = getLoanService();
-
   const result = loanService.updateOverdueStatuses();
 
   if (result.success) {
-    ui.alert(
-      'Update Complete',
-      `Updated ${result.data} loans to overdue status.`,
-      ui.ButtonSet.OK
-    );
+    Logger.log(`Updated ${result.data} loans to overdue status.`);
+    return { updated: result.data || 0 };
   } else {
-    ui.alert('Update Failed', result.error || 'Unknown error', ui.ButtonSet.OK);
+    Logger.log(`Update failed: ${result.error}`);
+    return { updated: 0, error: result.error };
   }
 }
 
@@ -165,88 +108,45 @@ function updateOverdueStatuses(): void {
  * Initializes headers on all master sheets
  */
 function initializeAllHeaders(): void {
-  const ui = SpreadsheetApp.getUi();
-
   const borrowerResult = getBorrowerService().ensureHeaders();
   const mediaResult = getMediaService().ensureHeaders();
   const loanResult = getLoanService().ensureHeaders();
 
-  const results = [
-    `Borrowers: ${borrowerResult.success ? 'OK' : borrowerResult.error}`,
-    `Media: ${mediaResult.success ? 'OK' : mediaResult.error}`,
-    `Loans: ${loanResult.success ? 'OK' : loanResult.error}`,
-  ].join('\n');
-
-  ui.alert('Header Initialization', results, ui.ButtonSet.OK);
+  Logger.log(`Header Initialization:
+Borrowers: ${borrowerResult.success ? 'OK' : borrowerResult.error}
+Media: ${mediaResult.success ? 'OK' : mediaResult.error}
+Loans: ${loanResult.success ? 'OK' : loanResult.error}`);
 }
 
 // ============================================================================
-// SIDEBAR FUNCTIONS (called from client-side JS)
-// ============================================================================
-
-// Re-export sidebar functions for global scope
-// These are imported and need to be exposed globally
-(globalThis as Record<string, unknown>).showContextSidebar = showContextSidebar;
-(globalThis as Record<string, unknown>).getSidebarContext = getSidebarContext;
-(globalThis as Record<string, unknown>).include = include;
-
-// ============================================================================
-// BORROWER DIALOG FUNCTIONS
+// BORROWER FUNCTIONS (called from client-side JS)
 // ============================================================================
 
 /**
- * Shows the add borrower dialog
+ * Gets all borrowers
  */
-function showAddBorrowerDialog(): void {
-  const html = HtmlService.createTemplateFromFile('BorrowerDialog')
-    .evaluate()
-    .setWidth(400)
-    .setHeight(450);
-
-  SpreadsheetApp.getUi().showModalDialog(html, 'Add Borrower');
+function getAllBorrowers(): unknown[] {
+  const service = getBorrowerService();
+  const result = service.getAll();
+  return result.success && result.data ? result.data : [];
 }
 
 /**
- * Shows the edit borrower dialog for the selected row
+ * Gets active borrowers only
  */
-function showEditBorrowerDialog(): void {
-  const sheet = SpreadsheetApp.getActiveSheet();
-  const row = sheet.getActiveCell().getRow();
-
-  if (row <= 1) {
-    SpreadsheetApp.getUi().alert('Please select a borrower row (not the header).');
-    return;
-  }
-
-  const data = sheet.getRange(row, 1, 1, 7).getValues()[0];
-  const borrower = {
-    id: data[0],
-    name: data[1],
-    email: data[2],
-    phone: data[3],
-    status: data[4],
-    joinDate: data[5],
-    notes: data[6],
-  };
-
-  const template = HtmlService.createTemplateFromFile('BorrowerDialog');
-  template.borrower = borrower;
-  template.isEdit = true;
-
-  const html = template.evaluate().setWidth(400).setHeight(450);
-  SpreadsheetApp.getUi().showModalDialog(html, 'Edit Borrower');
+function getActiveBorrowers(): unknown[] {
+  const service = getBorrowerService();
+  const result = service.getActiveBorrowers();
+  return result.success && result.data ? result.data : [];
 }
 
 /**
- * Shows the search borrowers dialog
+ * Searches borrowers
  */
-function showSearchBorrowersDialog(): void {
-  const html = HtmlService.createTemplateFromFile('SearchDialog')
-    .evaluate()
-    .setWidth(500)
-    .setHeight(400);
-
-  SpreadsheetApp.getUi().showModalDialog(html, 'Search Borrowers');
+function searchBorrowers(query: string): unknown[] {
+  const service = getBorrowerService();
+  const result = service.searchBorrowers(query);
+  return result.success && result.data ? result.data : [];
 }
 
 /**
@@ -281,104 +181,52 @@ function saveBorrower(borrowerData: {
 }
 
 /**
- * Views loans for selected borrower
+ * Suspends a borrower by ID
  */
-function viewBorrowerLoans(): string {
-  const sheet = SpreadsheetApp.getActiveSheet();
-  const row = sheet.getActiveCell().getRow();
-
-  if (row <= 1) {
-    throw new Error('Please select a borrower row');
-  }
-
-  const borrowerId = sheet.getRange(row, 1).getValue();
-  const loanService = getLoanService();
-  const result = loanService.getActiveLoansByBorrower(borrowerId);
-
-  if (!result.success) {
-    throw new Error(result.error);
-  }
-
-  return `Found ${result.data?.length || 0} active loans`;
-}
-
-/**
- * Suspends the selected borrower
- */
-function suspendSelectedBorrower(): void {
-  const sheet = SpreadsheetApp.getActiveSheet();
-  const row = sheet.getActiveCell().getRow();
-
-  if (row <= 1) {
-    throw new Error('Please select a borrower row');
-  }
-
-  const borrowerId = sheet.getRange(row, 1).getValue();
+function suspendBorrowerById(id: string): { success: boolean; error?: string } {
   const service = getBorrowerService();
-  const result = service.suspendBorrower(borrowerId);
+  const result = service.suspendBorrower(id);
+  return { success: result.success, error: result.error };
+}
 
-  if (!result.success) {
-    throw new Error(result.error);
-  }
+/**
+ * Activates a borrower by ID
+ */
+function activateBorrowerById(id: string): { success: boolean; error?: string } {
+  const service = getBorrowerService();
+  const result = service.update(id, { status: 'active' });
+  return { success: result.success, error: result.error };
 }
 
 // ============================================================================
-// MEDIA DIALOG FUNCTIONS
+// MEDIA FUNCTIONS (called from client-side JS)
 // ============================================================================
 
 /**
- * Shows the add media dialog
+ * Gets all media
  */
-function showAddMediaDialog(): void {
-  const html = HtmlService.createTemplateFromFile('MediaDialog')
-    .evaluate()
-    .setWidth(400)
-    .setHeight(450);
-
-  SpreadsheetApp.getUi().showModalDialog(html, 'Add Media');
+function getAllMedia(): unknown[] {
+  const service = getMediaService();
+  const result = service.getAll();
+  return result.success && result.data ? result.data : [];
 }
 
 /**
- * Shows the edit media dialog for the selected row
+ * Gets available media (not on loan)
  */
-function showEditMediaDialog(): void {
-  const sheet = SpreadsheetApp.getActiveSheet();
-  const row = sheet.getActiveCell().getRow();
-
-  if (row <= 1) {
-    SpreadsheetApp.getUi().alert('Please select a media row (not the header).');
-    return;
-  }
-
-  const data = sheet.getRange(row, 1, 1, 7).getValues()[0];
-  const media = {
-    id: data[0],
-    title: data[1],
-    author: data[2],
-    type: data[3],
-    isbn: data[4],
-    status: data[5],
-    notes: data[6],
-  };
-
-  const template = HtmlService.createTemplateFromFile('MediaDialog');
-  template.media = media;
-  template.isEdit = true;
-
-  const html = template.evaluate().setWidth(400).setHeight(450);
-  SpreadsheetApp.getUi().showModalDialog(html, 'Edit Media');
+function getAvailableMedia(): unknown[] {
+  const service = getMediaService();
+  const result = service.getAvailableMedia();
+  return result.success && result.data ? result.data : [];
 }
 
 /**
- * Shows the search media dialog
+ * Searches media
  */
-function showSearchMediaDialog(): void {
-  const html = HtmlService.createTemplateFromFile('SearchDialog')
-    .evaluate()
-    .setWidth(500)
-    .setHeight(400);
-
-  SpreadsheetApp.getUi().showModalDialog(html, 'Search Media');
+function searchMedia(query: string): unknown[] {
+  const service = getMediaService();
+  const result = service.searchMedia(query);
+  return result.success && result.data ? result.data : [];
 }
 
 /**
@@ -415,116 +263,78 @@ function saveMedia(mediaData: {
   }
 }
 
-/**
- * Checks availability of selected media
- */
-function checkMediaAvailability(): string {
-  const sheet = SpreadsheetApp.getActiveSheet();
-  const row = sheet.getActiveCell().getRow();
-
-  if (row <= 1) {
-    throw new Error('Please select a media row');
-  }
-
-  const mediaId = sheet.getRange(row, 1).getValue();
-  const service = getMediaService();
-  const result = service.isAvailable(mediaId);
-
-  if (!result.success) {
-    throw new Error(result.error);
-  }
-
-  return result.data ? 'Item is available' : 'Item is not available';
-}
-
-/**
- * Marks selected media as lost
- */
-function markSelectedMediaAsLost(): void {
-  const sheet = SpreadsheetApp.getActiveSheet();
-  const row = sheet.getActiveCell().getRow();
-
-  if (row <= 1) {
-    throw new Error('Please select a media row');
-  }
-
-  const mediaId = sheet.getRange(row, 1).getValue();
-  const service = getMediaService();
-  const result = service.markAsLost(mediaId);
-
-  if (!result.success) {
-    throw new Error(result.error);
-  }
-}
-
 // ============================================================================
-// LOAN DIALOG FUNCTIONS
+// LOAN FUNCTIONS (called from client-side JS)
 // ============================================================================
 
 /**
- * Shows the checkout dialog
+ * Gets active loans with borrower and media details
  */
-function showCheckoutDialog(): void {
-  const html = HtmlService.createTemplateFromFile('CheckoutDialog')
-    .evaluate()
-    .setWidth(450)
-    .setHeight(400);
+function getActiveLoansWithDetails(): unknown[] {
+  const loanService = getLoanService();
+  const borrowerService = getBorrowerService();
+  const mediaService = getMediaService();
 
-  SpreadsheetApp.getUi().showModalDialog(html, 'New Checkout');
-}
-
-/**
- * Shows the extend loan dialog
- */
-function showExtendLoanDialog(): void {
-  const sheet = SpreadsheetApp.getActiveSheet();
-  const row = sheet.getActiveCell().getRow();
-
-  if (row <= 1) {
-    SpreadsheetApp.getUi().alert('Please select a loan row (not the header).');
-    return;
+  const loansResult = loanService.getActiveLoans();
+  if (!loansResult.success || !loansResult.data) {
+    return [];
   }
 
-  const loanId = sheet.getRange(row, 1).getValue();
+  // Enrich with borrower and media names
+  const borrowersResult = borrowerService.getAll();
+  const mediaResult = mediaService.getAll();
 
-  const template = HtmlService.createTemplateFromFile('ExtendLoanDialog');
-  template.loanId = loanId;
+  const borrowersMap: Record<string, string> = {};
+  const mediaMap: Record<string, string> = {};
 
-  const html = template.evaluate().setWidth(350).setHeight(200);
-  SpreadsheetApp.getUi().showModalDialog(html, 'Extend Loan');
+  if (borrowersResult.success && borrowersResult.data) {
+    borrowersResult.data.forEach((b) => {
+      borrowersMap[b.id] = b.name;
+    });
+  }
+
+  if (mediaResult.success && mediaResult.data) {
+    mediaResult.data.forEach((m) => {
+      mediaMap[m.id] = m.title;
+    });
+  }
+
+  return loansResult.data.map((loan) => ({
+    ...loan,
+    borrowerName: borrowersMap[loan.borrowerId] || loan.borrowerId,
+    mediaTitle: mediaMap[loan.mediaId] || loan.mediaId,
+  }));
 }
 
 /**
- * Processes a checkout
+ * Gets overdue loans
  */
-function processCheckout(data: {
-  borrowerId: string;
-  mediaId: string;
-  loanDays: number;
-}): { success: boolean; error?: string } {
+function getOverdueLoans(): unknown[] {
   const service = getLoanService();
-  const result = service.checkout(data.borrowerId, data.mediaId, data.loanDays);
+  const result = service.getOverdueLoans();
+  return result.success && result.data ? result.data : [];
+}
+
+/**
+ * Processes a new checkout
+ */
+function processCheckout(
+  borrowerId: string,
+  mediaId: string,
+  loanDays: number = 14
+): { success: boolean; error?: string } {
+  const service = getLoanService();
+  const result = service.checkout(borrowerId, mediaId, loanDays);
   return { success: result.success, error: result.error };
 }
 
 /**
- * Processes return for selected loan
+ * Returns a loan by ID
  */
-function processSelectedReturn(): void {
-  const sheet = SpreadsheetApp.getActiveSheet();
-  const row = sheet.getActiveCell().getRow();
-
-  if (row <= 1) {
-    throw new Error('Please select a loan row');
-  }
-
-  const loanId = sheet.getRange(row, 1).getValue();
+function returnLoanById(id: string): { success: boolean; error?: string } {
   const service = getLoanService();
-  const result = service.processReturn(loanId);
-
-  if (!result.success) {
-    throw new Error(result.error);
-  }
+  const result = service.returnLoan(id);
+  return { success: result.success, error: result.error };
 }
 
 /**
@@ -536,118 +346,40 @@ function extendLoan(loanId: string, days: number): { success: boolean; error?: s
   return { success: result.success, error: result.error };
 }
 
-/**
- * Filters to show overdue loans
- */
-function filterOverdueLoans(): number {
-  const service = getLoanService();
-  const result = service.getOverdueLoans();
-
-  if (!result.success || !result.data) {
-    throw new Error(result.error);
-  }
-
-  // TODO: Apply filter to sheet
-  return result.data.length;
-}
-
-/**
- * Filters to show active loans
- */
-function filterActiveLoans(): number {
-  const service = getLoanService();
-  const result = service.getActiveLoans();
-
-  if (!result.success || !result.data) {
-    throw new Error(result.error);
-  }
-
-  // TODO: Apply filter to sheet
-  return result.data.length;
-}
-
-// ============================================================================
-// SEARCH FUNCTIONS
-// ============================================================================
-
-/**
- * Searches borrowers
- */
-function searchBorrowers(query: string): unknown[] {
-  const service = getBorrowerService();
-  const result = service.searchBorrowers(query);
-
-  if (!result.success || !result.data) {
-    return [];
-  }
-
-  return result.data;
-}
-
-/**
- * Searches media
- */
-function searchMedia(query: string): unknown[] {
-  const service = getMediaService();
-  const result = service.searchMedia(query);
-
-  if (!result.success || !result.data) {
-    return [];
-  }
-
-  return result.data;
-}
-
-/**
- * Gets all borrowers (for autocomplete)
- */
-function getAllBorrowers(): unknown[] {
-  const service = getBorrowerService();
-  const result = service.getActiveBorrowers();
-  return result.success && result.data ? result.data : [];
-}
-
-/**
- * Gets all available media (for autocomplete)
- */
-function getAvailableMedia(): unknown[] {
-  const service = getMediaService();
-  const result = service.getAvailableMedia();
-  return result.success && result.data ? result.data : [];
-}
-
 // ============================================================================
 // EXPOSE GLOBAL FUNCTIONS
 // ============================================================================
 
-// These need to be in global scope for GAS
-(globalThis as Record<string, unknown>).onOpen = onOpen;
-(globalThis as Record<string, unknown>).onInstall = onInstall;
+// Web app entry points
+(globalThis as Record<string, unknown>).doGet = doGet;
+(globalThis as Record<string, unknown>).getAppContext = getAppContext;
+(globalThis as Record<string, unknown>).include = include;
+
+// Setup functions
 (globalThis as Record<string, unknown>).runDiscovery = runDiscovery;
 (globalThis as Record<string, unknown>).showConfig = showConfig;
 (globalThis as Record<string, unknown>).clearConfig = clearConfig;
+(globalThis as Record<string, unknown>).setHubId = setHubId;
 (globalThis as Record<string, unknown>).updateOverdueStatuses = updateOverdueStatuses;
 (globalThis as Record<string, unknown>).initializeAllHeaders = initializeAllHeaders;
-(globalThis as Record<string, unknown>).showAddBorrowerDialog = showAddBorrowerDialog;
-(globalThis as Record<string, unknown>).showEditBorrowerDialog = showEditBorrowerDialog;
-(globalThis as Record<string, unknown>).showSearchBorrowersDialog = showSearchBorrowersDialog;
-(globalThis as Record<string, unknown>).saveBorrower = saveBorrower;
-(globalThis as Record<string, unknown>).viewBorrowerLoans = viewBorrowerLoans;
-(globalThis as Record<string, unknown>).suspendSelectedBorrower = suspendSelectedBorrower;
-(globalThis as Record<string, unknown>).showAddMediaDialog = showAddMediaDialog;
-(globalThis as Record<string, unknown>).showEditMediaDialog = showEditMediaDialog;
-(globalThis as Record<string, unknown>).showSearchMediaDialog = showSearchMediaDialog;
-(globalThis as Record<string, unknown>).saveMedia = saveMedia;
-(globalThis as Record<string, unknown>).checkMediaAvailability = checkMediaAvailability;
-(globalThis as Record<string, unknown>).markSelectedMediaAsLost = markSelectedMediaAsLost;
-(globalThis as Record<string, unknown>).showCheckoutDialog = showCheckoutDialog;
-(globalThis as Record<string, unknown>).showExtendLoanDialog = showExtendLoanDialog;
-(globalThis as Record<string, unknown>).processCheckout = processCheckout;
-(globalThis as Record<string, unknown>).processSelectedReturn = processSelectedReturn;
-(globalThis as Record<string, unknown>).extendLoan = extendLoan;
-(globalThis as Record<string, unknown>).filterOverdueLoans = filterOverdueLoans;
-(globalThis as Record<string, unknown>).filterActiveLoans = filterActiveLoans;
-(globalThis as Record<string, unknown>).searchBorrowers = searchBorrowers;
-(globalThis as Record<string, unknown>).searchMedia = searchMedia;
+
+// Borrower functions
 (globalThis as Record<string, unknown>).getAllBorrowers = getAllBorrowers;
+(globalThis as Record<string, unknown>).getActiveBorrowers = getActiveBorrowers;
+(globalThis as Record<string, unknown>).searchBorrowers = searchBorrowers;
+(globalThis as Record<string, unknown>).saveBorrower = saveBorrower;
+(globalThis as Record<string, unknown>).suspendBorrowerById = suspendBorrowerById;
+(globalThis as Record<string, unknown>).activateBorrowerById = activateBorrowerById;
+
+// Media functions
+(globalThis as Record<string, unknown>).getAllMedia = getAllMedia;
 (globalThis as Record<string, unknown>).getAvailableMedia = getAvailableMedia;
+(globalThis as Record<string, unknown>).searchMedia = searchMedia;
+(globalThis as Record<string, unknown>).saveMedia = saveMedia;
+
+// Loan functions
+(globalThis as Record<string, unknown>).getActiveLoansWithDetails = getActiveLoansWithDetails;
+(globalThis as Record<string, unknown>).getOverdueLoans = getOverdueLoans;
+(globalThis as Record<string, unknown>).processCheckout = processCheckout;
+(globalThis as Record<string, unknown>).returnLoanById = returnLoanById;
+(globalThis as Record<string, unknown>).extendLoan = extendLoan;

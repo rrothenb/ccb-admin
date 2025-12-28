@@ -1,109 +1,97 @@
-# CCB Library Admin
+# CCB Library Admin - Web App Conversion
 
-A minimal library management system built on Google Sheets + Apps Script, designed for non-technical volunteers.
+These files convert the sidebar-based app into a standalone web app.
 
-## Overview
+## What Changed
 
-This system uses a **four-spreadsheet architecture**:
+| Old (Sidebar) | New (Web App) |
+|---------------|---------------|
+| `src/ui/sidebar.ts` | `src/ui/webapp.ts` |
+| `src/ui/html/Sidebar.html` | `src/ui/html/App.html` |
+| `src/ui/html/SidebarJS.html` | `src/ui/html/AppJS.html` |
+| `src/gas-entry.ts` | `src/gas-entry.ts` (modified) |
 
-| Spreadsheet | Purpose | Apps Script |
-|-------------|---------|-------------|
-| **Borrowers** | Master data for library members | No (passive) |
-| **Media** | Master data for books, DVDs, etc. | No (passive) |
-| **Loans** | Master data for loan records | No (passive) |
-| **Hub** | Volunteer interface with linked views | Yes |
+## Installation
 
-The Hub spreadsheet uses `IMPORTRANGE` to display data from the three master spreadsheets, and a context-aware sidebar with Apps Script to write changes back to the masters.
+1. **Copy these files into your existing project:**
 
-## Features
+   ```
+   src/ui/webapp.ts           → replaces sidebar.ts (or keep both)
+   src/ui/html/App.html       → new file
+   src/ui/html/AppJS.html     → new file  
+   src/gas-entry.ts           → replaces existing gas-entry.ts
+   ```
 
-- **Context-aware sidebar**: Automatically shows relevant actions based on the active sheet tab
-- **Auto-discovery**: Finds master spreadsheets by name (no manual ID configuration)
-- **Borrower management**: Add, edit, search, suspend borrowers
-- **Media management**: Add, edit, search, track availability
-- **Loan management**: Checkout, return, extend loans with validation
-- **Autocomplete**: Quick borrower/media lookup during checkout
+2. **Keep these existing files unchanged:**
+   - `src/services/*` (all service files)
+   - `src/types/*` (all type files)
+   - `src/ui/html/Styles.html` (CSS, still used)
 
-## Quick Start
+## Deployment
 
-```bash
-# 1. Install dependencies
-npm install
+1. **Build and push:**
+   ```bash
+   npm run build
+   npm run push
+   ```
 
-# 2. Login to Google Apps Script
-npx clasp login
+2. **Create a "Hub" spreadsheet** (for access control):
+   - Create an empty Google Sheet called "Library Hub" (or any name)
+   - Share it with the volunteers who should have access
+   - Copy its ID from the URL
 
-# 3. Create 3 master spreadsheets in Google Drive
-#    Named: "Borrowers", "Media", "Loans"
+3. **Configure access control** (in Apps Script editor):
+   - Open the script editor: `clasp open`
+   - Run the function: `setHubId('YOUR_HUB_SPREADSHEET_ID')`
+   - Run discovery: `runDiscovery()`
 
-# 4. Auto-create the Hub spreadsheet
-npm run setup:hub
+4. **Deploy as web app:**
+   - In Apps Script editor: Deploy → New deployment
+   - Type: **Web app**
+   - Execute as: **Me** (your account)
+   - Who has access: **Anyone with Google account**
+   - Click Deploy and copy the URL
 
-# 5. Create Apps Script project (use Hub ID from step 4)
-npx clasp create --type sheets --title "Library Manager" --parentId YOUR_HUB_SPREADSHEET_ID
+5. **Share with volunteers:**
+   - Give them the web app URL
+   - Make sure they're shared on the Hub spreadsheet
+   - They just visit the URL and sign in — no scary authorization!
 
-# 6. Build and deploy
-npm run push
+## How Access Control Works
+
+The web app checks if the signed-in user has access to your Hub spreadsheet:
+
+```
+User visits web app URL
+    ↓
+Signs in with Google (normal login)
+    ↓
+Script checks: Can this user access Hub spreadsheet?
+    ↓
+Yes → Show the app
+No  → Show "Access Denied"
 ```
 
-See [SETUP.md](./SETUP.md) for detailed setup instructions.
+To add/remove volunteers:
+- **Add:** Share the Hub spreadsheet with them
+- **Remove:** Remove their access to the Hub spreadsheet
 
-## Development
+## Differences from Sidebar Version
 
-```bash
-# Run tests
-npm test
+1. **No spreadsheet visible** — Volunteers just see the web app UI
+2. **No authorization prompt** — Just normal Google sign-in
+3. **Tab-based navigation** — Click tabs instead of switching sheets
+4. **Search is client-side** — Faster filtering of loaded data
+5. **Modals instead of dialogs** — Forms appear in-page, not separate windows
 
-# Watch mode for TypeScript
-npm run watch
+## Setup Checklist
 
-# Lint
-npm run lint
-```
-
-## Data Model
-
-### Borrower
-| Field | Type | Description |
-|-------|------|-------------|
-| id | string | Unique identifier (UUID) |
-| name | string | Full name |
-| email | string | Email address |
-| phone | string | Phone number |
-| status | enum | active, suspended, inactive |
-| joinDate | string | Date joined (yyyy-MM-dd) |
-| notes | string | Additional notes |
-
-### Media
-| Field | Type | Description |
-|-------|------|-------------|
-| id | string | Unique identifier (UUID) |
-| title | string | Title |
-| author | string | Author, creator, or director |
-| type | enum | book, dvd, magazine, audiobook, other |
-| isbn | string | ISBN or barcode |
-| status | enum | available, on-loan, lost, damaged, retired |
-| notes | string | Additional notes |
-
-### Loan
-| Field | Type | Description |
-|-------|------|-------------|
-| id | string | Unique identifier (UUID) |
-| borrowerId | string | Reference to borrower |
-| mediaId | string | Reference to media item |
-| checkoutDate | string | Checkout date (yyyy-MM-dd) |
-| dueDate | string | Due date (yyyy-MM-dd) |
-| returnDate | string | Return date (yyyy-MM-dd), empty if active |
-| status | enum | active, returned, overdue, lost |
-
-## Tech Stack
-
-- **Runtime**: Google Apps Script (V8)
-- **Language**: TypeScript
-- **Build**: TypeScript compiler + clasp
-- **Testing**: Jest with GAS mocks
-- **UI**: HTML/CSS/JS in GAS dialogs and sidebar
-
-## License
-
-MIT
+- [ ] Copy new files to project
+- [ ] Keep existing services and types
+- [ ] Build and push: `npm run push`
+- [ ] Create Hub spreadsheet for access control
+- [ ] Run `setHubId('...')` in script editor
+- [ ] Run `runDiscovery()` to find master spreadsheets
+- [ ] Deploy as web app
+- [ ] Share Hub spreadsheet with volunteers
+- [ ] Share web app URL with volunteers
