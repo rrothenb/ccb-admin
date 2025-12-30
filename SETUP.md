@@ -1,14 +1,22 @@
 # Library Management System - Setup Guide
 
-This guide walks you through setting up the library management system for development and deployment.
+Complete setup instructions for deploying the CCB Library Admin web application.
 
 ## Prerequisites
 
-- Node.js 18+ and npm
-- A Google account
-- Google Apps Script CLI (`clasp`)
+- **Node.js 18+** and npm
+- **A Google account** (preferably a dedicated account for production)
+- **Google Apps Script CLI** (`clasp`)
 
-## Initial Setup
+## Overview
+
+You'll be creating:
+1. **3 Master Spreadsheets** - Your actual data (Borrowers, Media, Loans)
+2. **1 Access Control Spreadsheet** - Controls who can use the web app (can be empty)
+3. **1 Apps Script Project** - The backend code
+4. **1 Web App Deployment** - The user-facing application
+
+## Step-by-Step Setup
 
 ### 1. Install Dependencies
 
@@ -16,230 +24,366 @@ This guide walks you through setting up the library management system for develo
 npm install
 ```
 
+This installs TypeScript, the build tools, Google Apps Script types, and testing frameworks.
+
 ### 2. Login to Google Apps Script
 
 ```bash
 npx clasp login
 ```
 
-This opens a browser window to authenticate with your Google account.
+This opens a browser window to authenticate with your Google account. Use the account that will own the deployment.
+
+**For production:** Use a dedicated organizational account, not a personal account.
 
 ### 3. Create the Master Spreadsheets
 
-In your Google Drive, create the following **3 master spreadsheets**:
+In Google Drive, create these **3 spreadsheets**:
 
-1. **Borrowers** - Will store all borrower/member data
-2. **Media** - Will store all media items (books, DVDs, etc.)
-3. **Loans** - Will store all loan records
+1. **Borrowers** - Will store library member data
+2. **Media** - Will store media items (books, DVDs, etc.)
+3. **Loans** - Will store checkout/loan records
 
-**Important naming requirements:**
-- Spreadsheet names must **start with** the exact names above (e.g., "Borrowers", "Borrowers-v2", "Media Dev", etc.)
-- The system will auto-discover and use the most recently modified spreadsheet for each type
+#### Important Naming Requirements
 
-**Note:** You can add initial data to these spreadsheets now, or leave them empty - the system will initialize headers automatically later.
+- Spreadsheet names must **start with** these exact names
+  - ✅ "Borrowers", "Borrowers-v2", "Borrowers Dev"
+  - ✅ "Media", "Media Production", "Media-2024"
+  - ✅ "Loans", "Loans Master"
+- The discovery system will find the **most recently modified** spreadsheet for each type
+- This allows you to have separate dev and production spreadsheets
 
-### 4. Create the Hub Spreadsheet (Automated)
+**Note:** You can add data now or leave them empty - the system will initialize headers automatically later.
 
-Run the automated setup script to create your Hub spreadsheet:
+### 4. Create the Access Control Spreadsheet
 
-```bash
-npm run setup:hub
-```
+Create **1 more spreadsheet** in Google Drive:
 
-This script will:
-1. ✓ Search for your 3 master spreadsheets
-2. ✓ Validate all 3 exist (errors if any are missing)
-3. ✓ Create a new "Library Hub" spreadsheet
-4. ✓ Create the 3 required sheets (Borrowers, Media, Loans)
-5. ✓ Add IMPORTRANGE formulas to link to master spreadsheets
-6. ✓ Output the Hub spreadsheet URL
+- **Name:** "CCB Webapp Access Control" (or any name you prefer)
+- **Purpose:** Controls who can access the web app
+- **Contents:** Can be completely empty
 
-**If the script fails with "Missing master spreadsheet(s)":**
-- Make sure you created all 3 master spreadsheets in Step 3
-- Verify they're named correctly (starting with "Borrowers", "Media", "Loans")
-- Check they're not in the trash
+This spreadsheet's sharing settings determine who can use the web app:
+- Anyone with **view** or **edit** access to this spreadsheet can use the web app
+- No access to this spreadsheet = denied access to the web app
 
-### 5. Create a New Apps Script Project
+**For production:**
+- Share this spreadsheet with your library volunteers
+- Do NOT share the master spreadsheets with volunteers (the web app will access them on their behalf)
 
-Option A: Create standalone project and link:
+### 5. Create the Apps Script Project
+
+Create a new standalone Apps Script project:
+
 ```bash
 npx clasp create --type standalone --title "Library Manager"
 ```
 
-Option B: Create bound to the Hub spreadsheet (recommended):
-```bash
-npx clasp create --type sheets --title "Library Manager" --parentId YOUR_HUB_SPREADSHEET_ID
-```
-
-**Tip:** Copy the Hub spreadsheet ID from the URL created in Step 4. The spreadsheet ID is the long string between `/d/` and `/edit` in the URL.
-
 This creates a `.clasp.json` file with your script ID.
 
-### 6. Deploy
+**Alternative (bound to a spreadsheet):**
+```bash
+npx clasp create --type sheets --title "Library Manager" --parentId YOUR_ACCESS_CONTROL_SPREADSHEET_ID
+```
+
+Use this if you want the script project accessible directly from the Access Control spreadsheet's Extensions menu.
+
+### 6. Build and Deploy the Code
 
 ```bash
 npm run push
 ```
 
-This compiles TypeScript and pushes to Google Apps Script.
+This command:
+1. Compiles TypeScript to JavaScript
+2. Bundles the code with esbuild
+3. Pushes to Google Apps Script
 
-## Development Workflow
-
-### Local Development
-
-```bash
-# Watch mode - recompiles on changes
-npm run watch
-
-# In another terminal, push when ready
-npm run push
+You should see output like:
+```
+└─ dist/appsscript.json
+└─ dist/code.js
+Pushed 2 files.
 ```
 
-### Running Tests
+### 7. Configure in Apps Script Editor
+
+Open the Apps Script editor:
 
 ```bash
-# Run all tests
-npm test
-
-# Run tests in watch mode
-npm run test:watch
-
-# Run with coverage
-npm run test:coverage
+npx clasp open
 ```
 
-### Linting
+This opens the project in your browser.
 
-```bash
-npm run lint
+#### 7a. Set the Access Control Spreadsheet ID
+
+1. Copy the spreadsheet ID from your Access Control spreadsheet's URL
+   - The URL looks like: `https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit`
+   - Copy the long string between `/d/` and `/edit`
+
+2. At the bottom of the Apps Script editor, find the execution panel (or View → Execution log)
+
+3. In the execution panel, type this command:
+   ```javascript
+   setAccessControlId('PASTE_YOUR_SPREADSHEET_ID_HERE')
+   ```
+
+4. Press Enter or click Run
+
+5. **First run:** You'll need to authorize the script
+   - Click "Review permissions"
+   - Choose your account
+   - Click "Advanced" → "Go to Library Manager (unsafe)"
+   - Click "Allow"
+
+6. Check the execution log - you should see:
+   ```
+   Access Control spreadsheet ID set to: YOUR_ID
+   ```
+
+#### 7b. Discover Master Spreadsheets
+
+Run the discovery process to find your 3 master spreadsheets:
+
+```javascript
+runDiscovery()
 ```
 
-## Environment Switching (Dev vs Production)
+Check the execution log. You should see:
+```
+Discovery complete!
 
-The system uses convention over configuration - it discovers spreadsheets by name in whatever Google account you're logged into with `clasp`.
+Found:
+- Borrowers: "Borrowers"
+- Media: "Media"
+- Loans: "Loans"
+```
+
+**If discovery fails:**
+- Make sure all 3 spreadsheets exist and are named correctly
+- Verify they're not in the trash
+- Check you're logged into the correct Google account
+- Make sure the spreadsheets are in your Google Drive (not just shared with you)
+
+#### 7c. Verify Configuration
+
+Run this to verify everything is configured:
+
+```javascript
+showConfig()
+```
+
+You should see all 4 IDs set:
+```
+Current Configuration:
+Borrowers ID: 1abc...
+Media ID: 1def...
+Loans ID: 1ghi...
+Access Control ID: 1jkl...
+Last Discovery: 2025-12-30 12:00:00
+```
+
+If any IDs are "(not set)", go back and fix the issue.
+
+### 8. Deploy as Web App
+
+1. In Apps Script editor, click **Deploy → New deployment**
+
+2. Click the gear icon next to "Select type" and choose **Web app**
+
+3. Fill in the deployment settings:
+   - **Description:** "Library Manager v1" (or whatever you prefer)
+   - **Execute as:** **Me** (your account - this is important!)
+   - **Who has access:** **Anyone with Google account**
+
+4. Click **Deploy**
+
+5. **Copy the web app URL** - it looks like:
+   ```
+   https://script.google.com/macros/s/AKfycby.../exec
+   ```
+
+**Important Notes:**
+- "Execute as: Me" means the script runs with YOUR permissions, giving it access to the master spreadsheets
+- "Who has access: Anyone with Google account" means anyone can visit the URL, but they still need to pass the access control check
+
+### 9. Initialize Headers (Optional)
+
+If your master spreadsheets are empty, initialize the column headers:
+
+```javascript
+initializeAllHeaders()
+```
+
+This adds the header row to each master spreadsheet:
+- **Borrowers:** id, name, email, phone, status, joinDate, notes
+- **Media:** id, title, author, type, isbn, status, notes
+- **Loans:** id, borrowerId, mediaId, checkoutDate, dueDate, returnDate, status
+
+You can also manually add these headers if you prefer.
+
+### 10. Share and Test
+
+1. **Share the Access Control spreadsheet** with your test user(s)
+2. **Give them the web app URL**
+3. Have them visit the URL and sign in with their Google account
+4. They should see the Library Manager web app!
+
+**Test the access control:**
+- Remove a user's access to the Access Control spreadsheet
+- Have them refresh the web app
+- They should see "Access Denied"
+
+## Development vs. Production Environments
+
+The system discovers spreadsheets by name in the currently logged-in Google account. To maintain separate environments:
 
 ### For Development
 
 1. Login with your dev account: `npx clasp login`
-2. Create test spreadsheets named "Borrowers", "Media", "Loans" in that account
-3. Push to a dev script project
+2. Create dev spreadsheets: "Borrowers Dev", "Media Dev", "Loans Dev", "Access Control Dev"
+3. Create dev Apps Script project
+4. Run discovery and deploy
 
 ### For Production
 
 1. Login with the production account: `npx clasp login`
-2. Ensure production spreadsheets exist with the same names
-3. Push to the production script project
+2. Create production spreadsheets: "Borrowers", "Media", "Loans", "CCB Webapp Access Control"
+3. Create production Apps Script project
+4. Run discovery and deploy
+
+### Managing Multiple Environments
 
 You can maintain multiple `.clasp.json` files:
 
 ```bash
-# Development
+# Save development config
 cp .clasp.json .clasp.dev.json
 
-# Production (after logging in with prod account and creating project)
+# Switch to prod account and create prod project
+npx clasp login
+npx clasp create --type standalone --title "Library Manager Production"
+
+# Save production config
 cp .clasp.json .clasp.prod.json
 
-# Switch environments
-cp .clasp.dev.json .clasp.json   # for dev
-cp .clasp.prod.json .clasp.json  # for prod
+# Switch between environments
+cp .clasp.dev.json .clasp.json   # Switch to dev
+cp .clasp.prod.json .clasp.json  # Switch to prod
 ```
 
-## First Run in Google Sheets
+After switching, run `npm run push` to deploy to that environment.
 
-1. **Open the Hub spreadsheet** (from the URL output in Step 4)
-2. **Authorize IMPORTRANGE formulas**
-   - You'll see `#REF!` errors initially - this is normal
-   - Click on any cell showing the error
-   - Click "Allow access" when prompted
-   - The data from master spreadsheets will now appear
-3. **Refresh the page** - you should see "Library Manager" menu appear
-4. **Initialize headers** (optional, if master spreadsheets are empty)
-   - Go to **Library Manager > Maintenance > Initialize Headers**
-   - This adds column headers to all 3 master spreadsheets
+## Maintenance Functions
 
-## Hub Spreadsheet Architecture
+These functions are available in the Apps Script editor:
 
-The `npm run setup:hub` script automatically creates a Hub spreadsheet with:
+### `runDiscovery()`
+Searches for master spreadsheets and updates configuration. Run this if:
+- You renamed a master spreadsheet
+- You want to switch to a different set of master spreadsheets
+- Discovery failed during initial setup
 
-- **3 sheets (tabs):** Borrowers, Media, Loans
-- **IMPORTRANGE formulas** in each sheet that pull data from the master spreadsheets:
-  ```
-  =IMPORTRANGE("MASTER_SPREADSHEET_ID", "Sheet1!A:G")
-  ```
+### `showConfig()`
+Displays current configuration (all spreadsheet IDs and last discovery date).
 
-**How it works:**
-- The Hub displays read-only data imported from the masters via `IMPORTRANGE`
-- Volunteers interact with the Hub using the sidebar and menus
-- Apps Script writes changes back to the master spreadsheets
-- IMPORTRANGE automatically updates the Hub to reflect the changes
+### `clearConfig()`
+Clears all configuration. Use this to start over.
 
-The sidebar will automatically show context-appropriate actions based on which sheet tab is active.
+### `setAccessControlId('id')`
+Sets the Access Control spreadsheet ID. Run this if you change the spreadsheet.
 
-## Project Structure
+### `initializeAllHeaders()`
+Adds column headers to all master spreadsheets. Safe to run multiple times (won't duplicate).
 
-```
-ccb-admin/
-├── src/
-│   ├── types/           # TypeScript type definitions
-│   │   ├── entities.ts  # Borrower, Media, Loan types
-│   │   └── config.ts    # Configuration types
-│   ├── services/        # Business logic services
-│   │   ├── discovery.ts # Auto-discovery of spreadsheets
-│   │   ├── borrowers.ts # Borrower CRUD operations
-│   │   ├── media.ts     # Media CRUD operations
-│   │   └── loans.ts     # Loan CRUD operations
-│   ├── ui/              # User interface components
-│   │   ├── sidebar.ts   # Sidebar logic
-│   │   └── html/        # HTML templates
-│   ├── utils/           # Utility functions
-│   │   └── validation.ts
-│   ├── test/            # Test setup and mocks
-│   └── gas-entry.ts     # Apps Script entry points
-├── dist/                # Compiled output (pushed to GAS)
-├── package.json
-├── tsconfig.json
-├── jest.config.js
-└── appsscript.json      # GAS manifest
-```
+### `updateOverdueStatuses()`
+Updates loan statuses to mark overdue loans. You can run this manually or set up a daily trigger.
+
+## Setting Up Automated Tasks (Optional)
+
+You can set up triggers to run maintenance tasks automatically:
+
+1. In Apps Script editor: **Triggers** (clock icon on left sidebar)
+2. Click **Add Trigger**
+3. Choose function: `updateOverdueStatuses`
+4. Event source: **Time-driven**
+5. Type: **Day timer**
+6. Time: **Midnight to 1am** (or your preferred time)
+7. Click **Save**
+
+This will automatically mark overdue loans each day.
 
 ## Troubleshooting
-
-### "Missing master spreadsheet(s)" error during Hub setup
-
-The `npm run setup:hub` script requires all 3 master spreadsheets to exist before creating the Hub.
-
-**Solution:**
-1. Create spreadsheets in Google Drive named "Borrowers", "Media", and "Loans"
-2. Ensure they're not in the trash
-3. Verify you're logged into the correct Google account: `npx clasp login`
-4. Run the setup script again: `npm run setup:hub`
 
 ### "Not authenticated with clasp" error
 
 **Solution:**
 1. Run `npx clasp login`
-2. Complete the authentication flow in your browser
-3. Run the setup script again: `npm run setup:hub`
+2. Complete authentication in browser
+3. Try your command again
 
-### "Could not access master spreadsheet" error
-
-This error occurs when the Apps Script can't find the configured master spreadsheets.
+### "Missing master spreadsheet(s)" error during discovery
 
 **Solution:**
-Run **Library Manager > Setup > Discover Master Spreadsheets** to configure the master spreadsheet IDs.
+1. Verify all 3 spreadsheets exist in Google Drive
+2. Check they're named correctly (starting with "Borrowers", "Media", "Loans")
+3. Make sure they're not in the trash
+4. Verify you're logged into the correct account: `npx clasp login`
+5. Run `runDiscovery()` again
 
-### Menu doesn't appear
+### "Could not access master spreadsheet" runtime error
 
-1. Refresh the spreadsheet
-2. Check the Apps Script logs: `npx clasp logs`
-3. Ensure the script is properly bound/deployed
+**Solution:**
+- The spreadsheet IDs in configuration are invalid or you don't have access
+- Run `runDiscovery()` to reconfigure
+
+### Access denied for valid users
+
+**Solution:**
+1. Run `showConfig()` - verify Access Control ID is set
+2. Check the user has access to the Access Control spreadsheet (view or edit)
+3. Have the user refresh the web app page
+4. Check Apps Script logs: `npx clasp logs`
+
+### Changes to code not appearing
+
+**Solution:**
+1. Make sure you ran `npm run push` after making changes
+2. Refresh the web app page (hard refresh: Cmd+Shift+R or Ctrl+Shift+R)
+3. Check for build errors: `npm run build`
+4. Check Apps Script logs: `npx clasp logs`
 
 ### Authorization errors
 
-The first time the script runs, it will ask for permissions. Click through the authorization flow. On free Google accounts, you may see an "Unverified app" warning - click "Advanced" and "Go to Library Manager (unsafe)" to proceed.
+The first time the script runs, Google will ask for permissions. On free accounts, you may see "Unverified app" warning:
+1. Click **Advanced**
+2. Click **Go to Library Manager (unsafe)**
+3. Review permissions and click **Allow**
 
-### Changes not appearing
+This is normal for personal projects that haven't gone through Google's verification process.
 
-1. Make sure you ran `npm run push`
-2. Refresh the spreadsheet
-3. Check for TypeScript compilation errors: `npm run build`
+## Security Notes
+
+- **Access Control:** The Access Control spreadsheet sharing is your only security layer
+- **Script Execution:** The web app runs as YOUR account (the deployer)
+- **Data Access:** Your account needs view/edit access to all master spreadsheets
+- **User Permissions:** Users do NOT need direct access to master spreadsheets
+- **Audit:** All changes are made by your account in the logs
+
+## Next Steps
+
+- Add initial data to your master spreadsheets
+- Share the Access Control spreadsheet with your library team
+- Set up automated overdue loan checking (see "Setting Up Automated Tasks")
+- Customize the web app UI if needed (see `src/ui/html/App.html`)
+
+## Getting Help
+
+- Check the logs: `npx clasp logs`
+- Review the code: `npx clasp open`
+- See [README.md](README.md) for architecture overview
+
+## License
+
+MIT

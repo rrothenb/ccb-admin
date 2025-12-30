@@ -47,7 +47,7 @@ export interface Loan {
   status: LoanStatus;
 }
 
-/** Sheet names in the Hub spreadsheet */
+/** Sheet names used in the system (historically from Hub, now webapp tabs) */
 export type SheetName = 'Borrowers' | 'Media' | 'Loans';
 
 /** Column headers for each entity type */

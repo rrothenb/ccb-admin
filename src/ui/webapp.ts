@@ -3,22 +3,22 @@
  *
  * This replaces the sidebar-based approach with a standalone web app.
  * Access is controlled by checking if the user has access to a designated
- * "Hub" spreadsheet - reusing Google Drive's sharing as the access control list.
+ * "CCB Webapp Access Control" spreadsheet - reusing Google Drive's sharing as the access control list.
  */
 
 import { SheetName } from '../types';
 
 /**
- * The Hub spreadsheet ID - used for access control.
+ * The CCB Webapp Access Control spreadsheet ID - used for access control.
  * Users with view or edit access to this spreadsheet can use the web app.
  *
- * Set this to your Hub spreadsheet ID after creating it.
+ * Set this using the setAccessControlId() function after creating the spreadsheet.
  */
-const HUB_SPREADSHEET_ID =
-  PropertiesService.getScriptProperties().getProperty('HUB_SPREADSHEET_ID') || '';
+const ACCESS_CONTROL_SPREADSHEET_ID =
+  PropertiesService.getScriptProperties().getProperty('ACCESS_CONTROL_SPREADSHEET_ID') || '';
 
 /**
- * Checks if the current user has access to the Hub spreadsheet
+ * Checks if the current user has access to the CCB Webapp Access Control spreadsheet
  */
 function checkAccess(): { authorized: boolean; email: string; error?: string } {
   const user = Session.getActiveUser().getEmail();
@@ -27,14 +27,18 @@ function checkAccess(): { authorized: boolean; email: string; error?: string } {
     return { authorized: false, email: '', error: 'Could not determine user email' };
   }
 
-  if (!HUB_SPREADSHEET_ID) {
-    // If no Hub ID is configured, allow access (for initial setup)
-    Logger.log('Warning: HUB_SPREADSHEET_ID not configured. Allowing access for setup.');
-    return { authorized: true, email: user };
+  if (!ACCESS_CONTROL_SPREADSHEET_ID) {
+    // No Access Control spreadsheet configured - deny all access
+    Logger.log(`Access denied for ${user}: ACCESS_CONTROL_SPREADSHEET_ID not configured.`);
+    return {
+      authorized: false,
+      email: user,
+      error: 'Access Control not configured. Contact administrator.'
+    };
   }
 
   try {
-    const file = DriveApp.getFileById(HUB_SPREADSHEET_ID);
+    const file = DriveApp.getFileById(ACCESS_CONTROL_SPREADSHEET_ID);
     const editors = file.getEditors().map((e) => e.getEmail().toLowerCase());
     const viewers = file.getViewers().map((e) => e.getEmail().toLowerCase());
     const owner = file.getOwner()?.getEmail().toLowerCase() || '';
@@ -137,19 +141,30 @@ function include(filename: string): string {
 }
 
 /**
- * Sets the Hub spreadsheet ID for access control
+ * Sets the CCB Webapp Access Control spreadsheet ID for access control
  * Call this once during initial setup
  */
-function setHubSpreadsheetId(id: string): void {
-  PropertiesService.getScriptProperties().setProperty('HUB_SPREADSHEET_ID', id);
-  Logger.log(`Hub spreadsheet ID set to: ${id}`);
+function setAccessControlSpreadsheetId(id: string): void {
+  PropertiesService.getScriptProperties().setProperty('ACCESS_CONTROL_SPREADSHEET_ID', id);
+  Logger.log(`CCB Webapp Access Control spreadsheet ID set to: ${id}`);
 }
 
 /**
- * Gets the current Hub spreadsheet ID
+ * Gets the current CCB Webapp Access Control spreadsheet ID
  */
-function getHubSpreadsheetId(): string {
-  return PropertiesService.getScriptProperties().getProperty('HUB_SPREADSHEET_ID') || '';
+function getAccessControlSpreadsheetId(): string {
+  return PropertiesService.getScriptProperties().getProperty('ACCESS_CONTROL_SPREADSHEET_ID') || '';
 }
 
-export { doGet, checkAccess, getAppContext, include, setHubSpreadsheetId, getHubSpreadsheetId };
+/**
+ * Checks if the current user has access, throws error if not
+ * Call this at the start of every server-side function that handles data
+ */
+function requireAccess(): void {
+  const access = checkAccess();
+  if (!access.authorized) {
+    throw new Error(`Access denied for user: ${access.email}. ${access.error || 'Contact administrator for access.'}`);
+  }
+}
+
+export { doGet, checkAccess, getAppContext, include, setAccessControlSpreadsheetId, getAccessControlSpreadsheetId, requireAccess };

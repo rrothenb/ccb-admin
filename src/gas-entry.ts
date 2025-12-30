@@ -13,7 +13,7 @@ import {
   clearMasterConfig,
 } from './services/discovery';
 
-import { doGet, getAppContext, include, setHubSpreadsheetId, getHubSpreadsheetId } from './ui/webapp';
+import { doGet, getAppContext, include, setAccessControlSpreadsheetId, getAccessControlSpreadsheetId, requireAccess } from './ui/webapp';
 
 import { getBorrowerService } from './services/borrowers';
 import { getMediaService } from './services/media';
@@ -62,7 +62,7 @@ function showConfig(): void {
 Borrowers ID: ${config.borrowersId || '(not set)'}
 Media ID: ${config.mediaId || '(not set)'}
 Loans ID: ${config.loansId || '(not set)'}
-Hub ID: ${getHubSpreadsheetId() || '(not set)'}
+Access Control ID: ${getAccessControlSpreadsheetId() || '(not set)'}
 Last Discovery: ${config.lastDiscoveryDate || '(never)'}`);
 }
 
@@ -75,13 +75,13 @@ function clearConfig(): void {
 }
 
 /**
- * Sets the Hub spreadsheet ID for access control
+ * Sets the CCB Webapp Access Control spreadsheet ID for access control
  * Run this from the Apps Script editor:
- *   setHubId('your-spreadsheet-id-here')
+ *   setAccessControlId('your-spreadsheet-id-here')
  */
-function setHubId(id: string): void {
-  setHubSpreadsheetId(id);
-  Logger.log(`Hub ID set to: ${id}`);
+function setAccessControlId(id: string): void {
+  setAccessControlSpreadsheetId(id);
+  Logger.log(`Access Control spreadsheet ID set to: ${id}`);
 }
 
 // ============================================================================
@@ -126,6 +126,10 @@ Loans: ${loanResult.success ? 'OK' : loanResult.error}`);
  * Gets all borrowers
  */
 function getAllBorrowers(): unknown[] {
+  requireAccess();
+  const user = Session.getActiveUser().getEmail();
+  Logger.log(`[AUDIT] ${user} retrieved all borrowers`);
+
   const service = getBorrowerService();
   const result = service.getAll();
   return result.success && result.data ? result.data : [];
@@ -135,6 +139,10 @@ function getAllBorrowers(): unknown[] {
  * Gets active borrowers only
  */
 function getActiveBorrowers(): unknown[] {
+  requireAccess();
+  const user = Session.getActiveUser().getEmail();
+  Logger.log(`[AUDIT] ${user} retrieved active borrowers`);
+
   const service = getBorrowerService();
   const result = service.getActiveBorrowers();
   return result.success && result.data ? result.data : [];
@@ -144,6 +152,10 @@ function getActiveBorrowers(): unknown[] {
  * Searches borrowers
  */
 function searchBorrowers(query: string): unknown[] {
+  requireAccess();
+  const user = Session.getActiveUser().getEmail();
+  Logger.log(`[AUDIT] ${user} searched borrowers: "${query}"`);
+
   const service = getBorrowerService();
   const result = service.searchBorrowers(query);
   return result.success && result.data ? result.data : [];
@@ -159,9 +171,13 @@ function saveBorrower(borrowerData: {
   phone: string;
   notes: string;
 }): { success: boolean; error?: string } {
+  requireAccess();
+  const user = Session.getActiveUser().getEmail();
+
   const service = getBorrowerService();
 
   if (borrowerData.id) {
+    Logger.log(`[AUDIT] ${user} updated borrower: ${borrowerData.name} (ID: ${borrowerData.id})`);
     const result = service.update(borrowerData.id, {
       name: borrowerData.name,
       email: borrowerData.email,
@@ -170,6 +186,7 @@ function saveBorrower(borrowerData: {
     });
     return { success: result.success, error: result.error };
   } else {
+    Logger.log(`[AUDIT] ${user} created borrower: ${borrowerData.name}`);
     const result = service.createBorrower(
       borrowerData.name,
       borrowerData.email,
@@ -184,6 +201,10 @@ function saveBorrower(borrowerData: {
  * Suspends a borrower by ID
  */
 function suspendBorrowerById(id: string): { success: boolean; error?: string } {
+  requireAccess();
+  const user = Session.getActiveUser().getEmail();
+  Logger.log(`[AUDIT] ${user} suspended borrower: ${id}`);
+
   const service = getBorrowerService();
   const result = service.suspendBorrower(id);
   return { success: result.success, error: result.error };
@@ -193,6 +214,10 @@ function suspendBorrowerById(id: string): { success: boolean; error?: string } {
  * Activates a borrower by ID
  */
 function activateBorrowerById(id: string): { success: boolean; error?: string } {
+  requireAccess();
+  const user = Session.getActiveUser().getEmail();
+  Logger.log(`[AUDIT] ${user} activated borrower: ${id}`);
+
   const service = getBorrowerService();
   const result = service.update(id, { status: 'active' });
   return { success: result.success, error: result.error };
@@ -206,6 +231,10 @@ function activateBorrowerById(id: string): { success: boolean; error?: string } 
  * Gets all media
  */
 function getAllMedia(): unknown[] {
+  requireAccess();
+  const user = Session.getActiveUser().getEmail();
+  Logger.log(`[AUDIT] ${user} retrieved all media`);
+
   const service = getMediaService();
   const result = service.getAll();
   return result.success && result.data ? result.data : [];
@@ -215,6 +244,10 @@ function getAllMedia(): unknown[] {
  * Gets available media (not on loan)
  */
 function getAvailableMedia(): unknown[] {
+  requireAccess();
+  const user = Session.getActiveUser().getEmail();
+  Logger.log(`[AUDIT] ${user} retrieved available media`);
+
   const service = getMediaService();
   const result = service.getAvailableMedia();
   return result.success && result.data ? result.data : [];
@@ -224,6 +257,10 @@ function getAvailableMedia(): unknown[] {
  * Searches media
  */
 function searchMedia(query: string): unknown[] {
+  requireAccess();
+  const user = Session.getActiveUser().getEmail();
+  Logger.log(`[AUDIT] ${user} searched media: "${query}"`);
+
   const service = getMediaService();
   const result = service.searchMedia(query);
   return result.success && result.data ? result.data : [];
@@ -240,9 +277,13 @@ function saveMedia(mediaData: {
   isbn: string;
   notes: string;
 }): { success: boolean; error?: string } {
+  requireAccess();
+  const user = Session.getActiveUser().getEmail();
+
   const service = getMediaService();
 
   if (mediaData.id) {
+    Logger.log(`[AUDIT] ${user} updated media: ${mediaData.title} (ID: ${mediaData.id})`);
     const result = service.update(mediaData.id, {
       title: mediaData.title,
       author: mediaData.author,
@@ -252,6 +293,7 @@ function saveMedia(mediaData: {
     });
     return { success: result.success, error: result.error };
   } else {
+    Logger.log(`[AUDIT] ${user} created media: ${mediaData.title}`);
     const result = service.createMedia(
       mediaData.title,
       mediaData.author,
@@ -271,6 +313,10 @@ function saveMedia(mediaData: {
  * Gets active loans with borrower and media details
  */
 function getActiveLoansWithDetails(): unknown[] {
+  requireAccess();
+  const user = Session.getActiveUser().getEmail();
+  Logger.log(`[AUDIT] ${user} retrieved active loans with details`);
+
   const loanService = getLoanService();
   const borrowerService = getBorrowerService();
   const mediaService = getMediaService();
@@ -310,6 +356,10 @@ function getActiveLoansWithDetails(): unknown[] {
  * Gets overdue loans
  */
 function getOverdueLoans(): unknown[] {
+  requireAccess();
+  const user = Session.getActiveUser().getEmail();
+  Logger.log(`[AUDIT] ${user} retrieved overdue loans`);
+
   const service = getLoanService();
   const result = service.getOverdueLoans();
   return result.success && result.data ? result.data : [];
@@ -323,6 +373,10 @@ function processCheckout(
   mediaId: string,
   loanDays: number = 14
 ): { success: boolean; error?: string } {
+  requireAccess();
+  const user = Session.getActiveUser().getEmail();
+  Logger.log(`[AUDIT] ${user} processed checkout: borrower=${borrowerId}, media=${mediaId}, days=${loanDays}`);
+
   const service = getLoanService();
   const result = service.checkout(borrowerId, mediaId, loanDays);
   return { success: result.success, error: result.error };
@@ -332,6 +386,10 @@ function processCheckout(
  * Returns a loan by ID
  */
 function returnLoanById(id: string): { success: boolean; error?: string } {
+  requireAccess();
+  const user = Session.getActiveUser().getEmail();
+  Logger.log(`[AUDIT] ${user} returned loan: ${id}`);
+
   const service = getLoanService();
   const result = service.processReturn(id);
   return { success: result.success, error: result.error };
@@ -341,6 +399,10 @@ function returnLoanById(id: string): { success: boolean; error?: string } {
  * Extends a loan
  */
 function extendLoan(loanId: string, days: number): { success: boolean; error?: string } {
+  requireAccess();
+  const user = Session.getActiveUser().getEmail();
+  Logger.log(`[AUDIT] ${user} extended loan: ${loanId} by ${days} days`);
+
   const service = getLoanService();
   const result = service.extendLoan(loanId, days);
   return { success: result.success, error: result.error };
@@ -359,7 +421,7 @@ function extendLoan(loanId: string, days: number): { success: boolean; error?: s
 (globalThis as Record<string, unknown>).runDiscovery = runDiscovery;
 (globalThis as Record<string, unknown>).showConfig = showConfig;
 (globalThis as Record<string, unknown>).clearConfig = clearConfig;
-(globalThis as Record<string, unknown>).setHubId = setHubId;
+(globalThis as Record<string, unknown>).setAccessControlId = setAccessControlId;
 (globalThis as Record<string, unknown>).updateOverdueStatuses = updateOverdueStatuses;
 (globalThis as Record<string, unknown>).initializeAllHeaders = initializeAllHeaders;
 
