@@ -29,21 +29,59 @@ These files convert the sidebar-based app into a standalone web app.
 
 ## Deployment
 
+### Understanding the Tools
+
+Before you start, here's what these tools do:
+
+- **Google Apps Script**: Google's JavaScript platform that runs code on Google's servers and integrates with Google Workspace (Sheets, Docs, etc.)
+- **clasp**: Command-line tool that lets you develop Apps Script projects locally and sync them to Google's servers
+
+### Steps
+
 1. **Build and push:**
    ```bash
-   npm run build
-   npm run push
+   npm run build    # Bundles your TypeScript into Google Apps Script-compatible JavaScript
+   npm run push     # Uploads the code to Google's servers
    ```
 
 2. **Create a "Hub" spreadsheet** (for access control):
    - Create an empty Google Sheet called "Library Hub" (or any name)
    - Share it with the volunteers who should have access
-   - Copy its ID from the URL
+   - Copy its ID from the URL (the long string between `/d/` and `/edit`)
 
 3. **Configure access control** (in Apps Script editor):
-   - Open the script editor: `clasp open`
-   - Run the function: `setHubId('YOUR_HUB_SPREADSHEET_ID')`
-   - Run discovery: `runDiscovery()`
+
+   a. **Open the Apps Script editor:**
+   ```bash
+   clasp open
+   ```
+   This opens Google's web-based Apps Script editor in your browser.
+
+   b. **Run the setup functions:**
+   - At the top of the editor, you'll see a dropdown menu that says "Select function"
+   - Select `setHubId` from the dropdown
+   - You'll need to modify the function call to pass your Hub spreadsheet ID
+   - **Easier method**: Open the "Execution log" panel (View → Execution log)
+   - In the editor, scroll down to the `setHubId` function definition
+   - Replace the function temporarily with:
+     ```javascript
+     function setHubId() {
+       setHubSpreadsheetId('YOUR_HUB_SPREADSHEET_ID_HERE');
+       Logger.log('Hub ID set');
+     }
+     ```
+   - Click the "Run" button (▶️) at the top
+   - You may need to authorize the script on first run
+
+   c. **Run discovery:**
+   - Select `runDiscovery` from the function dropdown
+   - Click "Run" button
+   - Check the "Execution log" to see which master spreadsheets were found
+
+   d. **Verify configuration:**
+   - Select `showConfig` from the function dropdown
+   - Click "Run" button
+   - Check the "Execution log" to verify all IDs are set correctly
 
 4. **Deploy as web app:**
    - In Apps Script editor: Deploy → New deployment

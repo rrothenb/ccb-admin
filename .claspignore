@@ -1,0 +1,21 @@
+# Build script (Node.js only)
+build.js
+
+# Source files (we push the compiled dist/ instead)
+src/**
+
+# Config files
+tsconfig.json
+.eslintrc.js
+.gitignore
+.git/**
+
+# Dependencies
+node_modules/**
+
+# Tests
+**/*.test.ts
+**/*.spec.ts
+
+# Documentation
+README.md

@@ -333,7 +333,7 @@ function processCheckout(
  */
 function returnLoanById(id: string): { success: boolean; error?: string } {
   const service = getLoanService();
-  const result = service.returnLoan(id);
+  const result = service.processReturn(id);
   return { success: result.success, error: result.error };
 }
 

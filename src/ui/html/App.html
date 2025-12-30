@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <?!= include('Styles'); ?>
+    <style>
+      /* Full-page app styles */
+      body {
+        margin: 0;
+        min-height: 100vh;
+      }
+
+      .app-container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      .app-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+        padding-bottom: 16px;
+        border-bottom: 2px solid #e5e7eb;
+      }
+
+      .app-header h1 {
+        font-size: 24px;
+        font-weight: 600;
+        color: #111827;
+        margin: 0;
+      }
+
+      .user-info {
+        font-size: 13px;
+        color: #6b7280;
+      }
+
+      /* Tab navigation */
+      .tab-nav {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 24px;
+        border-bottom: 1px solid #e5e7eb;
+      }
+
+      .tab-btn {
+        padding: 12px 24px;
+        font-size: 14px;
+        font-weight: 500;
+        color: #6b7280;
+        background: none;
+        border: none;
+        border-bottom: 2px solid transparent;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+
+      .tab-btn:hover {
+        color: #374151;
+        background-color: #f9fafb;
+      }
+
+      .tab-btn.active {
+        color: #2563eb;
+        border-bottom-color: #2563eb;
+      }
+
+      /* Content panels */
+      .tab-content {
+        display: none;
+      }
+
+      .tab-content.active {
+        display: block;
+      }
+
+      .actions-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-bottom: 24px;
+      }
+
+      .actions-grid .btn {
+        width: auto;
+      }
+
+      /* Data table */
+      .data-section {
+        margin-top: 24px;
+      }
+
+      .data-section h3 {
+        font-size: 14px;
+        font-weight: 500;
+        color: #374151;
+        margin-bottom: 12px;
+      }
+
+      .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+
+      .data-table th,
+      .data-table td {
+        padding: 10px 12px;
+        text-align: left;
+        border-bottom: 1px solid #e5e7eb;
+      }
+
+      .data-table th {
+        background-color: #f9fafb;
+        font-weight: 500;
+        color: #374151;
+      }
+
+      .data-table tr:hover {
+        background-color: #f9fafb;
+      }
+
+      .data-table tr.selected {
+        background-color: #dbeafe;
+      }
+
+      .data-table .actions-cell {
+        white-space: nowrap;
+      }
+
+      .data-table .actions-cell .btn {
+        padding: 4px 8px;
+        font-size: 12px;
+        margin-right: 4px;
+      }
+
+      /* Status badges */
+      .status-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 9999px;
+        font-size: 12px;
+        font-weight: 500;
+      }
+
+      .status-badge.status-active,
+      .status-badge.status-available {
+        background-color: #d1fae5;
+        color: #065f46;
+      }
+
+      .status-badge.status-suspended,
+      .status-badge.status-overdue,
+      .status-badge.status-lost {
+        background-color: #fee2e2;
+        color: #991b1b;
+      }
+
+      .status-badge.status-inactive,
+      .status-badge.status-returned,
+      .status-badge.status-retired {
+        background-color: #f3f4f6;
+        color: #6b7280;
+      }
+
+      .status-badge.status-on-loan {
+        background-color: #dbeafe;
+        color: #1e40af;
+      }
+
+      .status-badge.status-damaged {
+        background-color: #fef3c7;
+        color: #92400e;
+      }
+
+      /* Modal overlay */
+      .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .modal-overlay.active {
+        display: flex;
+      }
+
+      .modal-content {
+        background: white;
+        border-radius: 8px;
+        padding: 24px;
+        max-width: 500px;
+        width: 90%;
+        max-height: 90vh;
+        overflow-y: auto;
+      }
+
+      .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+      }
+
+      .modal-header h2 {
+        font-size: 18px;
+        font-weight: 600;
+        margin: 0;
+      }
+
+      .modal-close {
+        background: none;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+        color: #6b7280;
+        padding: 0;
+        line-height: 1;
+      }
+
+      .modal-close:hover {
+        color: #374151;
+      }
+
+      /* Empty state */
+      .empty-state {
+        text-align: center;
+        padding: 40px;
+        color: #6b7280;
+      }
+
+      /* Loading indicator */
+      .loading {
+        text-align: center;
+        padding: 20px;
+        color: #6b7280;
+      }
+
+      /* Search box */
+      .search-box {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+
+      .search-box input {
+        flex: 1;
+      }
+
+      .search-box .btn {
+        width: auto;
+      }
+
+      /* Responsive adjustments */
+      @media (max-width: 600px) {
+        .app-container {
+          padding: 12px;
+        }
+
+        .tab-btn {
+          padding: 10px 16px;
+          font-size: 13px;
+        }
+
+        .data-table {
+          font-size: 13px;
+        }
+
+        .data-table th,
+        .data-table td {
+          padding: 8px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-container">
+      <header class="app-header">
+        <h1>📚 Library Manager</h1>
+        <span class="user-info" id="user-email"></span>
+      </header>
+
+      <!-- Tab Navigation -->
+      <nav class="tab-nav">
+        <button class="tab-btn active" data-tab="borrowers" onclick="switchTab('Borrowers')">
+          Borrowers
+        </button>
+        <button class="tab-btn" data-tab="media" onclick="switchTab('Media')">
+          Media
+        </button>
+        <button class="tab-btn" data-tab="loans" onclick="switchTab('Loans')">
+          Loans
+        </button>
+      </nav>
+
+      <!-- Borrowers Tab -->
+      <div id="borrowers-tab" class="tab-content active">
+        <div class="actions-grid">
+          <button class="btn btn-primary" onclick="showAddBorrowerModal()">+ Add Borrower</button>
+          <button class="btn btn-secondary" onclick="refreshCurrentTab()">Refresh</button>
+        </div>
+        <div class="search-box">
+          <input type="text" id="borrower-search" placeholder="Search by name or email..." 
+                 onkeypress="if(event.key==='Enter') searchBorrowersUI()">
+          <button class="btn btn-secondary" onclick="searchBorrowersUI()">Search</button>
+          <button class="btn btn-secondary" onclick="clearBorrowerSearch()">Clear</button>
+        </div>
+        <div class="data-section">
+          <table class="data-table" id="borrowers-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="borrowers-tbody">
+              <tr><td colspan="5" class="loading">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Media Tab -->
+      <div id="media-tab" class="tab-content">
+        <div class="actions-grid">
+          <button class="btn btn-primary" onclick="showAddMediaModal()">+ Add Media</button>
+          <button class="btn btn-secondary" onclick="refreshCurrentTab()">Refresh</button>
+        </div>
+        <div class="search-box">
+          <input type="text" id="media-search" placeholder="Search by title or author..."
+                 onkeypress="if(event.key==='Enter') searchMediaUI()">
+          <button class="btn btn-secondary" onclick="searchMediaUI()">Search</button>
+          <button class="btn btn-secondary" onclick="clearMediaSearch()">Clear</button>
+        </div>
+        <div class="data-section">
+          <table class="data-table" id="media-table">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Author</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="media-tbody">
+              <tr><td colspan="5" class="loading">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Loans Tab -->
+      <div id="loans-tab" class="tab-content">
+        <div class="actions-grid">
+          <button class="btn btn-success" onclick="showCheckoutModal()">+ New Checkout</button>
+          <button class="btn btn-secondary" onclick="refreshCurrentTab()">Refresh</button>
+          <button class="btn btn-secondary" onclick="showOverdueOnly()">Show Overdue</button>
+          <button class="btn btn-secondary" onclick="showAllLoans()">Show All Active</button>
+        </div>
+        <div class="data-section">
+          <table class="data-table" id="loans-table">
+            <thead>
+              <tr>
+                <th>Borrower</th>
+                <th>Media</th>
+                <th>Checkout</th>
+                <th>Due Date</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="loans-tbody">
+              <tr><td colspan="6" class="loading">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Status Area -->
+      <div id="status-area" class="status-area"></div>
+    </div>
+
+    <!-- Modal Container -->
+    <div id="modal-overlay" class="modal-overlay" onclick="closeModalOnOverlay(event)">
+      <div class="modal-content" id="modal-content">
+        <!-- Modal content loaded dynamically -->
+      </div>
+    </div>
+
+    <?!= include('AppJS'); ?>
+  </body>
+</html>

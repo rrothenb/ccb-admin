@@ -1,0 +1,670 @@
+<script>
+  /**
+   * Library Manager Web App - Client-side JavaScript
+   */
+
+  let currentTab = 'Borrowers';
+  let allBorrowers = [];
+  let allMedia = [];
+  let allLoans = [];
+  let showingOverdueOnly = false;
+
+  // ============================================================================
+  // INITIALIZATION
+  // ============================================================================
+
+  document.addEventListener('DOMContentLoaded', function () {
+    google.script.run
+      .withSuccessHandler(function (context) {
+        document.getElementById('user-email').textContent = context.userEmail;
+        loadTabData(currentTab);
+      })
+      .withFailureHandler(handleError)
+      .getAppContext();
+  });
+
+  // ============================================================================
+  // TAB SWITCHING
+  // ============================================================================
+
+  function switchTab(tabName) {
+    currentTab = tabName;
+
+    // Update tab buttons
+    document.querySelectorAll('.tab-btn').forEach(function (btn) {
+      btn.classList.toggle('active', btn.dataset.tab === tabName.toLowerCase());
+    });
+
+    // Update tab content
+    document.querySelectorAll('.tab-content').forEach(function (content) {
+      content.classList.remove('active');
+    });
+    document.getElementById(tabName.toLowerCase() + '-tab').classList.add('active');
+
+    // Load data for this tab
+    loadTabData(tabName);
+  }
+
+  function refreshCurrentTab() {
+    loadTabData(currentTab);
+  }
+
+  // ============================================================================
+  // DATA LOADING
+  // ============================================================================
+
+  function loadTabData(tabName) {
+    if (tabName === 'Borrowers') {
+      loadBorrowers();
+    } else if (tabName === 'Media') {
+      loadMedia();
+    } else if (tabName === 'Loans') {
+      loadLoans();
+    }
+  }
+
+  function loadBorrowers() {
+    document.getElementById('borrowers-tbody').innerHTML =
+      '<tr><td colspan="5" class="loading">Loading...</td></tr>';
+
+    google.script.run
+      .withSuccessHandler(function (borrowers) {
+        allBorrowers = borrowers || [];
+        renderBorrowers(allBorrowers);
+      })
+      .withFailureHandler(handleError)
+      .getAllBorrowers();
+  }
+
+  function loadMedia() {
+    document.getElementById('media-tbody').innerHTML =
+      '<tr><td colspan="5" class="loading">Loading...</td></tr>';
+
+    google.script.run
+      .withSuccessHandler(function (media) {
+        allMedia = media || [];
+        renderMedia(allMedia);
+      })
+      .withFailureHandler(handleError)
+      .getAllMedia();
+  }
+
+  function loadLoans() {
+    document.getElementById('loans-tbody').innerHTML =
+      '<tr><td colspan="6" class="loading">Loading...</td></tr>';
+
+    showingOverdueOnly = false;
+
+    google.script.run
+      .withSuccessHandler(function (loans) {
+        allLoans = loans || [];
+        renderLoans(allLoans);
+      })
+      .withFailureHandler(handleError)
+      .getActiveLoansWithDetails();
+  }
+
+  // ============================================================================
+  // RENDERING
+  // ============================================================================
+
+  function renderBorrowers(borrowers) {
+    var tbody = document.getElementById('borrowers-tbody');
+
+    if (!borrowers || borrowers.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No borrowers found</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = borrowers
+      .map(function (b) {
+        return (
+          '<tr data-id="' + b.id + '">' +
+          '<td>' + escapeHtml(b.name) + '</td>' +
+          '<td>' + escapeHtml(b.email) + '</td>' +
+          '<td>' + escapeHtml(b.phone || '') + '</td>' +
+          '<td><span class="status-badge status-' + b.status + '">' + b.status + '</span></td>' +
+          '<td class="actions-cell">' +
+          '<button class="btn btn-secondary" onclick="editBorrower(\'' + b.id + '\')">Edit</button>' +
+          (b.status === 'active'
+            ? '<button class="btn btn-danger" onclick="suspendBorrower(\'' + b.id + '\')">Suspend</button>'
+            : '<button class="btn btn-secondary" onclick="activateBorrower(\'' + b.id + '\')">Activate</button>') +
+          '</td>' +
+          '</tr>'
+        );
+      })
+      .join('');
+  }
+
+  function renderMedia(media) {
+    var tbody = document.getElementById('media-tbody');
+
+    if (!media || media.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No media found</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = media
+      .map(function (m) {
+        return (
+          '<tr data-id="' + m.id + '">' +
+          '<td>' + escapeHtml(m.title) + '</td>' +
+          '<td>' + escapeHtml(m.author || '') + '</td>' +
+          '<td>' + escapeHtml(m.type) + '</td>' +
+          '<td><span class="status-badge status-' + m.status + '">' + m.status + '</span></td>' +
+          '<td class="actions-cell">' +
+          '<button class="btn btn-secondary" onclick="editMedia(\'' + m.id + '\')">Edit</button>' +
+          '</td>' +
+          '</tr>'
+        );
+      })
+      .join('');
+  }
+
+  function renderLoans(loans) {
+    var tbody = document.getElementById('loans-tbody');
+
+    if (!loans || loans.length === 0) {
+      tbody.innerHTML =
+        '<tr><td colspan="6" class="empty-state">' +
+        (showingOverdueOnly ? 'No overdue loans' : 'No active loans') +
+        '</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = loans
+      .map(function (l) {
+        var isOverdue = l.status === 'overdue';
+        return (
+          '<tr data-id="' + l.id + '">' +
+          '<td>' + escapeHtml(l.borrowerName || l.borrowerId) + '</td>' +
+          '<td>' + escapeHtml(l.mediaTitle || l.mediaId) + '</td>' +
+          '<td>' + escapeHtml(l.checkoutDate) + '</td>' +
+          '<td>' + escapeHtml(l.dueDate) + '</td>' +
+          '<td><span class="status-badge status-' + l.status + '">' + l.status + '</span></td>' +
+          '<td class="actions-cell">' +
+          '<button class="btn btn-success" onclick="returnLoan(\'' + l.id + '\')">Return</button>' +
+          '<button class="btn btn-secondary" onclick="extendLoan(\'' + l.id + '\')">Extend</button>' +
+          '</td>' +
+          '</tr>'
+        );
+      })
+      .join('');
+  }
+
+  // ============================================================================
+  // SEARCH
+  // ============================================================================
+
+  function searchBorrowersUI() {
+    var query = document.getElementById('borrower-search').value.trim().toLowerCase();
+    if (!query) {
+      renderBorrowers(allBorrowers);
+      return;
+    }
+
+    var filtered = allBorrowers.filter(function (b) {
+      return (
+        (b.name && b.name.toLowerCase().indexOf(query) !== -1) ||
+        (b.email && b.email.toLowerCase().indexOf(query) !== -1)
+      );
+    });
+    renderBorrowers(filtered);
+  }
+
+  function clearBorrowerSearch() {
+    document.getElementById('borrower-search').value = '';
+    renderBorrowers(allBorrowers);
+  }
+
+  function searchMediaUI() {
+    var query = document.getElementById('media-search').value.trim().toLowerCase();
+    if (!query) {
+      renderMedia(allMedia);
+      return;
+    }
+
+    var filtered = allMedia.filter(function (m) {
+      return (
+        (m.title && m.title.toLowerCase().indexOf(query) !== -1) ||
+        (m.author && m.author.toLowerCase().indexOf(query) !== -1)
+      );
+    });
+    renderMedia(filtered);
+  }
+
+  function clearMediaSearch() {
+    document.getElementById('media-search').value = '';
+    renderMedia(allMedia);
+  }
+
+  function showOverdueOnly() {
+    showingOverdueOnly = true;
+    var filtered = allLoans.filter(function (l) {
+      return l.status === 'overdue';
+    });
+    renderLoans(filtered);
+  }
+
+  function showAllLoans() {
+    showingOverdueOnly = false;
+    renderLoans(allLoans);
+  }
+
+  // ============================================================================
+  // MODAL FUNCTIONS
+  // ============================================================================
+
+  function showModal(title, contentHtml) {
+    document.getElementById('modal-content').innerHTML =
+      '<div class="modal-header">' +
+      '<h2>' + title + '</h2>' +
+      '<button class="modal-close" onclick="closeModal()">&times;</button>' +
+      '</div>' +
+      '<div class="modal-body">' +
+      contentHtml +
+      '</div>';
+    document.getElementById('modal-overlay').classList.add('active');
+  }
+
+  function closeModal() {
+    document.getElementById('modal-overlay').classList.remove('active');
+  }
+
+  function closeModalOnOverlay(event) {
+    if (event.target.id === 'modal-overlay') {
+      closeModal();
+    }
+  }
+
+  // ============================================================================
+  // BORROWER ACTIONS
+  // ============================================================================
+
+  function showAddBorrowerModal() {
+    showModal(
+      'Add Borrower',
+      '<form id="borrower-form" onsubmit="submitBorrower(event)">' +
+        '<div class="form-group">' +
+        '<label for="b-name">Name *</label>' +
+        '<input type="text" id="b-name" required>' +
+        '</div>' +
+        '<div class="form-group">' +
+        '<label for="b-email">Email *</label>' +
+        '<input type="email" id="b-email" required>' +
+        '</div>' +
+        '<div class="form-group">' +
+        '<label for="b-phone">Phone</label>' +
+        '<input type="text" id="b-phone">' +
+        '</div>' +
+        '<div class="form-group">' +
+        '<label for="b-notes">Notes</label>' +
+        '<textarea id="b-notes" rows="3"></textarea>' +
+        '</div>' +
+        '<input type="hidden" id="b-id" value="">' +
+        '<button type="submit" class="btn btn-primary">Save Borrower</button>' +
+        '</form>'
+    );
+  }
+
+  function editBorrower(id) {
+    var borrower = allBorrowers.find(function (b) {
+      return b.id === id;
+    });
+    if (!borrower) {
+      showStatus('Borrower not found', 'error');
+      return;
+    }
+
+    showModal(
+      'Edit Borrower',
+      '<form id="borrower-form" onsubmit="submitBorrower(event)">' +
+        '<div class="form-group">' +
+        '<label for="b-name">Name *</label>' +
+        '<input type="text" id="b-name" required value="' + escapeAttr(borrower.name) + '">' +
+        '</div>' +
+        '<div class="form-group">' +
+        '<label for="b-email">Email *</label>' +
+        '<input type="email" id="b-email" required value="' + escapeAttr(borrower.email) + '">' +
+        '</div>' +
+        '<div class="form-group">' +
+        '<label for="b-phone">Phone</label>' +
+        '<input type="text" id="b-phone" value="' + escapeAttr(borrower.phone || '') + '">' +
+        '</div>' +
+        '<div class="form-group">' +
+        '<label for="b-notes">Notes</label>' +
+        '<textarea id="b-notes" rows="3">' + escapeHtml(borrower.notes || '') + '</textarea>' +
+        '</div>' +
+        '<input type="hidden" id="b-id" value="' + borrower.id + '">' +
+        '<button type="submit" class="btn btn-primary">Save Borrower</button>' +
+        '</form>'
+    );
+  }
+
+  function submitBorrower(event) {
+    event.preventDefault();
+    showStatus('Saving...', 'loading');
+
+    var data = {
+      id: document.getElementById('b-id').value || undefined,
+      name: document.getElementById('b-name').value,
+      email: document.getElementById('b-email').value,
+      phone: document.getElementById('b-phone').value,
+      notes: document.getElementById('b-notes').value,
+    };
+
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (result.success) {
+          showStatus('Borrower saved!', 'success');
+          closeModal();
+          loadBorrowers();
+        } else {
+          showStatus(result.error || 'Failed to save borrower', 'error');
+        }
+      })
+      .withFailureHandler(handleError)
+      .saveBorrower(data);
+  }
+
+  function suspendBorrower(id) {
+    if (!confirm('Are you sure you want to suspend this borrower?')) return;
+
+    showStatus('Suspending...', 'loading');
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (result.success) {
+          showStatus('Borrower suspended', 'success');
+          loadBorrowers();
+        } else {
+          showStatus(result.error || 'Failed to suspend', 'error');
+        }
+      })
+      .withFailureHandler(handleError)
+      .suspendBorrowerById(id);
+  }
+
+  function activateBorrower(id) {
+    showStatus('Activating...', 'loading');
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (result.success) {
+          showStatus('Borrower activated', 'success');
+          loadBorrowers();
+        } else {
+          showStatus(result.error || 'Failed to activate', 'error');
+        }
+      })
+      .withFailureHandler(handleError)
+      .activateBorrowerById(id);
+  }
+
+  // ============================================================================
+  // MEDIA ACTIONS
+  // ============================================================================
+
+  function showAddMediaModal() {
+    showModal(
+      'Add Media',
+      '<form id="media-form" onsubmit="submitMedia(event)">' +
+        '<div class="form-group">' +
+        '<label for="m-title">Title *</label>' +
+        '<input type="text" id="m-title" required>' +
+        '</div>' +
+        '<div class="form-group">' +
+        '<label for="m-author">Author</label>' +
+        '<input type="text" id="m-author">' +
+        '</div>' +
+        '<div class="form-group">' +
+        '<label for="m-type">Type *</label>' +
+        '<select id="m-type" required>' +
+        '<option value="book">Book</option>' +
+        '<option value="dvd">DVD</option>' +
+        '<option value="magazine">Magazine</option>' +
+        '<option value="audiobook">Audiobook</option>' +
+        '<option value="other">Other</option>' +
+        '</select>' +
+        '</div>' +
+        '<div class="form-group">' +
+        '<label for="m-isbn">ISBN / Barcode</label>' +
+        '<input type="text" id="m-isbn">' +
+        '</div>' +
+        '<div class="form-group">' +
+        '<label for="m-notes">Notes</label>' +
+        '<textarea id="m-notes" rows="3"></textarea>' +
+        '</div>' +
+        '<input type="hidden" id="m-id" value="">' +
+        '<button type="submit" class="btn btn-primary">Save Media</button>' +
+        '</form>'
+    );
+  }
+
+  function editMedia(id) {
+    var media = allMedia.find(function (m) {
+      return m.id === id;
+    });
+    if (!media) {
+      showStatus('Media not found', 'error');
+      return;
+    }
+
+    showModal(
+      'Edit Media',
+      '<form id="media-form" onsubmit="submitMedia(event)">' +
+        '<div class="form-group">' +
+        '<label for="m-title">Title *</label>' +
+        '<input type="text" id="m-title" required value="' + escapeAttr(media.title) + '">' +
+        '</div>' +
+        '<div class="form-group">' +
+        '<label for="m-author">Author</label>' +
+        '<input type="text" id="m-author" value="' + escapeAttr(media.author || '') + '">' +
+        '</div>' +
+        '<div class="form-group">' +
+        '<label for="m-type">Type *</label>' +
+        '<select id="m-type" required>' +
+        '<option value="book"' + (media.type === 'book' ? ' selected' : '') + '>Book</option>' +
+        '<option value="dvd"' + (media.type === 'dvd' ? ' selected' : '') + '>DVD</option>' +
+        '<option value="magazine"' + (media.type === 'magazine' ? ' selected' : '') + '>Magazine</option>' +
+        '<option value="audiobook"' + (media.type === 'audiobook' ? ' selected' : '') + '>Audiobook</option>' +
+        '<option value="other"' + (media.type === 'other' ? ' selected' : '') + '>Other</option>' +
+        '</select>' +
+        '</div>' +
+        '<div class="form-group">' +
+        '<label for="m-isbn">ISBN / Barcode</label>' +
+        '<input type="text" id="m-isbn" value="' + escapeAttr(media.isbn || '') + '">' +
+        '</div>' +
+        '<div class="form-group">' +
+        '<label for="m-notes">Notes</label>' +
+        '<textarea id="m-notes" rows="3">' + escapeHtml(media.notes || '') + '</textarea>' +
+        '</div>' +
+        '<input type="hidden" id="m-id" value="' + media.id + '">' +
+        '<button type="submit" class="btn btn-primary">Save Media</button>' +
+        '</form>'
+    );
+  }
+
+  function submitMedia(event) {
+    event.preventDefault();
+    showStatus('Saving...', 'loading');
+
+    var data = {
+      id: document.getElementById('m-id').value || undefined,
+      title: document.getElementById('m-title').value,
+      author: document.getElementById('m-author').value,
+      type: document.getElementById('m-type').value,
+      isbn: document.getElementById('m-isbn').value,
+      notes: document.getElementById('m-notes').value,
+    };
+
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (result.success) {
+          showStatus('Media saved!', 'success');
+          closeModal();
+          loadMedia();
+        } else {
+          showStatus(result.error || 'Failed to save media', 'error');
+        }
+      })
+      .withFailureHandler(handleError)
+      .saveMedia(data);
+  }
+
+  // ============================================================================
+  // LOAN ACTIONS
+  // ============================================================================
+
+  function showCheckoutModal() {
+    showModal(
+      'New Checkout',
+      '<form id="checkout-form" onsubmit="submitCheckout(event)">' +
+        '<div class="form-group">' +
+        '<label for="c-borrower">Borrower *</label>' +
+        '<select id="c-borrower" required>' +
+        '<option value="">Loading...</option>' +
+        '</select>' +
+        '</div>' +
+        '<div class="form-group">' +
+        '<label for="c-media">Media Item *</label>' +
+        '<select id="c-media" required>' +
+        '<option value="">Loading...</option>' +
+        '</select>' +
+        '</div>' +
+        '<div class="form-group">' +
+        '<label for="c-days">Loan Period (days)</label>' +
+        '<input type="number" id="c-days" value="14" min="1" max="90">' +
+        '</div>' +
+        '<button type="submit" class="btn btn-success">Checkout</button>' +
+        '</form>'
+    );
+
+    // Load borrowers for dropdown
+    google.script.run
+      .withSuccessHandler(function (borrowers) {
+        var select = document.getElementById('c-borrower');
+        select.innerHTML =
+          '<option value="">Select a borrower...</option>' +
+          borrowers
+            .filter(function (b) {
+              return b.status === 'active';
+            })
+            .map(function (b) {
+              return '<option value="' + b.id + '">' + escapeHtml(b.name) + ' (' + escapeHtml(b.email) + ')</option>';
+            })
+            .join('');
+      })
+      .getAllBorrowers();
+
+    // Load available media for dropdown
+    google.script.run
+      .withSuccessHandler(function (media) {
+        var select = document.getElementById('c-media');
+        select.innerHTML =
+          '<option value="">Select a media item...</option>' +
+          media
+            .map(function (m) {
+              return '<option value="' + m.id + '">' + escapeHtml(m.title) + ' by ' + escapeHtml(m.author || 'Unknown') + '</option>';
+            })
+            .join('');
+      })
+      .getAvailableMedia();
+  }
+
+  function submitCheckout(event) {
+    event.preventDefault();
+    showStatus('Processing checkout...', 'loading');
+
+    var borrowerId = document.getElementById('c-borrower').value;
+    var mediaId = document.getElementById('c-media').value;
+    var days = parseInt(document.getElementById('c-days').value) || 14;
+
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (result.success) {
+          showStatus('Checkout complete!', 'success');
+          closeModal();
+          loadLoans();
+          loadMedia(); // Refresh media to update availability
+        } else {
+          showStatus(result.error || 'Checkout failed', 'error');
+        }
+      })
+      .withFailureHandler(handleError)
+      .processCheckout(borrowerId, mediaId, days);
+  }
+
+  function returnLoan(id) {
+    if (!confirm('Mark this item as returned?')) return;
+
+    showStatus('Processing return...', 'loading');
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (result.success) {
+          showStatus('Return processed!', 'success');
+          loadLoans();
+          loadMedia(); // Refresh media to update availability
+        } else {
+          showStatus(result.error || 'Return failed', 'error');
+        }
+      })
+      .withFailureHandler(handleError)
+      .returnLoanById(id);
+  }
+
+  function extendLoan(id) {
+    var days = prompt('Extend loan by how many days?', '7');
+    if (!days) return;
+
+    var daysNum = parseInt(days);
+    if (isNaN(daysNum) || daysNum < 1) {
+      showStatus('Please enter a valid number of days', 'error');
+      return;
+    }
+
+    showStatus('Extending loan...', 'loading');
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (result.success) {
+          showStatus('Loan extended!', 'success');
+          loadLoans();
+        } else {
+          showStatus(result.error || 'Extension failed', 'error');
+        }
+      })
+      .withFailureHandler(handleError)
+      .extendLoan(id, daysNum);
+  }
+
+  // ============================================================================
+  // UTILITY FUNCTIONS
+  // ============================================================================
+
+  function escapeHtml(text) {
+    if (!text) return '';
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  function escapeAttr(text) {
+    if (!text) return '';
+    return text.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function showStatus(message, type) {
+    var statusArea = document.getElementById('status-area');
+    statusArea.textContent = message;
+    statusArea.className = 'status-area ' + type;
+
+    if (type !== 'loading') {
+      setTimeout(function () {
+        statusArea.className = 'status-area';
+      }, 3000);
+    }
+  }
+
+  function handleError(error) {
+    showStatus(error.message || 'An error occurred', 'error');
+    console.error(error);
+  }
+</script>
