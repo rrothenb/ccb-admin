@@ -76,14 +76,14 @@ This spreadsheet's sharing settings determine who can use the web app:
 Create a new standalone Apps Script project:
 
 ```bash
-npx clasp create --type standalone --title "Library Manager"
+npx clasp create --type standalone --title "CCB Admin"
 ```
 
 This creates a `.clasp.json` file with your script ID.
 
 **Alternative (bound to a spreadsheet):**
 ```bash
-npx clasp create --type sheets --title "Library Manager" --parentId YOUR_ACCESS_CONTROL_SPREADSHEET_ID
+npx clasp create --type sheets --title "CCB Admin" --parentId YOUR_ACCESS_CONTROL_SPREADSHEET_ID
 ```
 
 Use this if you want the script project accessible directly from the Access Control spreadsheet's Extensions menu.
@@ -134,7 +134,7 @@ This opens the project in your browser.
 5. **First run:** You'll need to authorize the script
    - Click "Review permissions"
    - Choose your account
-   - Click "Advanced" → "Go to Library Manager (unsafe)"
+   - Click "Advanced" → "Go to CCB Admin (unsafe)"
    - Click "Allow"
 
 6. Check the execution log - you should see:
@@ -193,7 +193,7 @@ If any IDs are "(not set)", go back and fix the issue.
 2. Click the gear icon next to "Select type" and choose **Web app**
 
 3. Fill in the deployment settings:
-   - **Description:** "Library Manager v1" (or whatever you prefer)
+   - **Description:** "CCB Admin v1" (or whatever you prefer)
    - **Execute as:** **Me** (your account - this is important!)
    - **Who has access:** **Anyone with Google account**
 
@@ -228,7 +228,7 @@ You can also manually add these headers if you prefer.
 1. **Share the Access Control spreadsheet** with your test user(s)
 2. **Give them the web app URL**
 3. Have them visit the URL and sign in with their Google account
-4. They should see the Library Manager web app!
+4. They should see the CCB Admin web app!
 
 **Test the access control:**
 - Remove a user's access to the Access Control spreadsheet
@@ -263,7 +263,7 @@ cp .clasp.json .clasp.dev.json
 
 # Switch to prod account and create prod project
 npx clasp login
-npx clasp create --type standalone --title "Library Manager Production"
+npx clasp create --type standalone --title "CCB Admin Production"
 
 # Save production config
 cp .clasp.json .clasp.prod.json
@@ -358,7 +358,7 @@ This will automatically mark overdue loans each day.
 
 The first time the script runs, Google will ask for permissions. On free accounts, you may see "Unverified app" warning:
 1. Click **Advanced**
-2. Click **Go to Library Manager (unsafe)**
+2. Click **Go to CCB Admin (unsafe)**
 3. Review permissions and click **Allow**
 
 This is normal for personal projects that haven't gone through Google's verification process.

@@ -51,14 +51,17 @@ class BaseEntityService<T extends Entity> {
     }
 
     const data = sheet.getDataRange().getValues();
+    console.log(`Found ${data.length} rows of data`);
     if (data.length <= 1) {
       return { success: true, data: [] };
     }
 
     const entities: T[] = [];
     // Skip header row
+    console.log(this.columns)
     for (let i = 1; i < data.length; i++) {
       const entity = this.rowToEntity(data[i]);
+      console.log(`Found entity: ${entity}`);
       if (entity) {
         entities.push(entity);
       }

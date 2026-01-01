@@ -42,8 +42,7 @@ class MediaService extends BaseEntityService<Media> {
       return result;
     }
 
-    const available = result.data.filter((m) => m.status === 'available');
-    return { success: true, data: available };
+    return { success: true, data: result.data };
   }
 
   /**

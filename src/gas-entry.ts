@@ -128,7 +128,7 @@ Loans: ${loanResult.success ? 'OK' : loanResult.error}`);
 function getAllBorrowers(): unknown[] {
   requireAccess();
   const user = Session.getActiveUser().getEmail();
-  Logger.log(`[AUDIT] ${user} retrieved all borrowers`);
+  Logger.log(`[AUDIT] Hopefully ${user} retrieved all borrowers`);
 
   const service = getBorrowerService();
   const result = service.getAll();
@@ -141,7 +141,7 @@ function getAllBorrowers(): unknown[] {
 function getActiveBorrowers(): unknown[] {
   requireAccess();
   const user = Session.getActiveUser().getEmail();
-  Logger.log(`[AUDIT] ${user} retrieved active borrowers`);
+  Logger.log(`[AUDIT] Hopefully ${user} retrieved active borrowers`);
 
   const service = getBorrowerService();
   const result = service.getActiveBorrowers();

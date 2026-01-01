@@ -95,36 +95,57 @@ Then run these setup functions:
 
 #### 1. Set Access Control Spreadsheet ID
 
-In the Apps Script editor's execution panel (at the bottom), type:
-```javascript
-setAccessControlId('your-spreadsheet-id-here')
-```
+First, get your Access Control spreadsheet ID from its URL (the long string between `/d/` and `/edit`).
 
-Replace `'your-spreadsheet-id-here'` with the actual ID from your Access Control spreadsheet's URL (the long string between `/d/` and `/edit`).
+In the Apps Script editor:
+1. Find the `setAccessControlId` function in the code (in `gas-entry.ts`)
+2. Temporarily modify it to call itself with your ID:
+   ```javascript
+   function setAccessControlId(spreadsheetId) {
+     // ... existing code ...
+   }
+
+   // Add this temporary function:
+   function setupAccessControl() {
+     setAccessControlId('your-spreadsheet-id-here');
+   }
+   ```
+3. At the top of the editor, select `setupAccessControl` from the function dropdown
+4. Click the **Run** button (play icon)
+5. Check the execution log at the bottom to confirm it ran successfully
+
+Alternatively, you can run it directly from the console:
+1. At the top of the editor, find the function dropdown and select `setAccessControlId`
+2. Click **Run**
+3. You'll get an error, but you can manually call it from the execution log console
+
+**Easier method:** Just modify the code temporarily:
+```javascript
+function runSetup() {
+  setAccessControlId('your-spreadsheet-id-here');
+}
+```
+Then select `runSetup` from the dropdown and click Run.
 
 #### 2. Discover Master Spreadsheets
 
 Run this to find your Borrowers, Media, and Loans spreadsheets:
-```javascript
-runDiscovery()
-```
-
-Check the execution log to verify all 3 were found.
+1. Select `runDiscovery` from the function dropdown at the top
+2. Click the **Run** button
+3. Check the execution log at the bottom to verify all 3 spreadsheets were found
 
 #### 3. Verify Configuration
 
 Run this to see the current configuration:
-```javascript
-showConfig()
-```
-
-All 4 IDs should be set (Borrowers, Media, Loans, Access Control).
+1. Select `showConfig` from the function dropdown
+2. Click **Run**
+3. Check the execution log - all 4 IDs should be set (Borrowers, Media, Loans, Access Control)
 
 ### Deploy as Web App
 
 1. In Apps Script editor: **Deploy → New deployment**
 2. Type: **Web app**
-3. Description: "Library Manager v1" (or whatever you prefer)
+3. Description: "CCB Admin v1" (or whatever you prefer)
 4. Execute as: **Me** (your account)
 5. Who has access: **Anyone with Google account**
 6. Click **Deploy** and copy the URL

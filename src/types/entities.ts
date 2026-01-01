@@ -52,7 +52,7 @@ export type SheetName = 'Borrowers' | 'Media' | 'Loans';
 
 /** Column headers for each entity type */
 export const BORROWER_COLUMNS: (keyof Borrower)[] = [
-  'id', 'name', 'email', 'phone', 'status', 'joinDate', 'notes'
+  'id', 'name', 'email', 'phone'
 ];
 
 export const MEDIA_COLUMNS: (keyof Media)[] = [

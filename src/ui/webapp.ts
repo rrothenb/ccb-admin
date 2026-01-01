@@ -69,7 +69,7 @@ function doGet(): GoogleAppsScript.HTML.HtmlOutput {
         <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1">
-          <title>Library Manager - Access Denied</title>
+          <title>CCB Admin - Access Denied</title>
           <style>
             body {
               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -112,13 +112,13 @@ function doGet(): GoogleAppsScript.HTML.HtmlOutput {
         </body>
       </html>
     `)
-      .setTitle('Library Manager - Access Denied')
+      .setTitle('CCB Admin - Access Denied')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
 
   return HtmlService.createTemplateFromFile('App')
     .evaluate()
-    .setTitle('Library Manager')
+    .setTitle('CCB Admin')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }

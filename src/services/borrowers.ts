@@ -40,11 +40,11 @@ class BorrowerService extends BaseEntityService<Borrower> {
   getActiveBorrowers(): OperationResult<Borrower[]> {
     const result = this.getAll();
     if (!result.success || !result.data) {
+      console.log(`Boo!  I got ${result.error}!`)
       return result;
     }
-
-    const activeBorrowers = result.data.filter((b) => b.status === 'active');
-    return { success: true, data: activeBorrowers };
+    console.log(`Woohoo!  I found ${result.data.length} borrowers!`)
+    return { success: true, data: result.data };
   }
 
   /**
