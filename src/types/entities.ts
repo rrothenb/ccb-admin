@@ -14,6 +14,9 @@ export interface Borrower {
   status: BorrowerStatus;
   joinDate: string; // ISO date string (yyyy-MM-dd)
   notes: string;
+  gender: string;
+  address: string;
+  postcode: string;
 }
 
 /** Type of media item */
@@ -29,9 +32,18 @@ export interface Media {
   author: string; // Author, director, or creator
   type: MediaType;
   isbn: string; // ISBN, barcode, or other identifier
-  status: MediaStatus;
   notes: string;
+  genres: string;
+  date: string;
+  abstract: string;
+  subjects: string;
+  description: string;
+  publisher: string;
+  place: string;
+  classification: string;
+  barcode: string;
 }
+// id	title	author	type	isbn	notes	genres	date	abstract	subjects	description	publisher	place	classification	barcode
 
 /** Status of a loan */
 export type LoanStatus = 'active' | 'returned' | 'overdue' | 'lost';
@@ -52,11 +64,11 @@ export type SheetName = 'Borrowers' | 'Media' | 'Loans';
 
 /** Column headers for each entity type */
 export const BORROWER_COLUMNS: (keyof Borrower)[] = [
-  'id', 'name', 'email', 'phone'
+  'id', 'name', 'email', 'phone', 'gender', 'address', 'postcode', 'status'
 ];
 
 export const MEDIA_COLUMNS: (keyof Media)[] = [
-  'id', 'title', 'author', 'type', 'isbn', 'status', 'notes'
+  'id', 'title', 'author', 'type', 'isbn', 'notes', 'genres', 'date', 'abstract',	'subjects', 'description', 'publisher', 'place', 'classification', 'barcode'
 ];
 
 export const LOAN_COLUMNS: (keyof Loan)[] = [

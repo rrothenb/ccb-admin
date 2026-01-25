@@ -29,7 +29,6 @@ class BorrowerService extends BaseEntityService<Borrower> {
       email,
       phone,
       status: 'active' as BorrowerStatus,
-      joinDate: today,
       notes,
     });
   }
@@ -43,8 +42,9 @@ class BorrowerService extends BaseEntityService<Borrower> {
       console.log(`Boo!  I got ${result.error}!`)
       return result;
     }
-    console.log(`Woohoo!  I found ${result.data.length} borrowers!`)
-    return { success: true, data: result.data };
+
+    const activeBorrowers = result.data.filter((b) => b.status === 'active');
+    return { success: true, data: activeBorrowers };
   }
 
   /**
