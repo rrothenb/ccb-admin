@@ -82,7 +82,7 @@ class MediaService extends BaseEntityService<Media> {
    * Updates the status of a media item
    */
   updateStatus(id: string, status: MediaStatus): OperationResult<Media> {
-    return this.update(id, { status });
+    return this.update(id, { status: status ?? 'Available'});
   }
 
   /**
@@ -115,7 +115,7 @@ class MediaService extends BaseEntityService<Media> {
       return { success: false, error: result.error };
     }
 
-    return { success: true, data: result.data.status === 'available' };
+    return { success: true, data: !result.data.status || result.data.status === 'available' };
   }
 
   /**

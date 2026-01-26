@@ -86,7 +86,7 @@ class BaseEntityService<T extends Entity> {
 
     // Find the row with matching ID (ID is assumed to be first column)
     for (let i = 1; i < data.length; i++) {
-      if (data[i][0] === id) {
+      if (data[i][0] == id) {
         const entity = this.rowToEntity(data[i]);
         if (entity) {
           return { success: true, data: entity };
@@ -94,7 +94,7 @@ class BaseEntityService<T extends Entity> {
       }
     }
 
-    return { success: false, error: `${this.sheetName} with ID ${id} not found` };
+    return { success: false, error: `${this.sheetName} with ID ${id} not found 1` };
   }
 
   /**
@@ -136,7 +136,7 @@ class BaseEntityService<T extends Entity> {
 
     // Find the row with matching ID
     for (let i = 1; i < data.length; i++) {
-      if (data[i][0] === id) {
+      if (data[i][0] == id) {
         const existingEntity = this.rowToEntity(data[i]);
         if (!existingEntity) {
           return { success: false, error: 'Failed to parse existing entity' };
@@ -154,7 +154,7 @@ class BaseEntityService<T extends Entity> {
       }
     }
 
-    return { success: false, error: `${this.sheetName} with ID ${id} not found` };
+    return { success: false, error: `${this.sheetName} with ID ${id} not found 2` };
   }
 
   /**
@@ -173,14 +173,14 @@ class BaseEntityService<T extends Entity> {
 
     // Find the row with matching ID
     for (let i = 1; i < data.length; i++) {
-      if (data[i][0] === id) {
+      if (data[i][0] == id) {
         // Delete the row (i+1 because sheet rows are 1-indexed)
         sheet.deleteRow(i + 1);
         return { success: true };
       }
     }
 
-    return { success: false, error: `${this.sheetName} with ID ${id} not found` };
+    return { success: false, error: `${this.sheetName} with ID ${id} not found 3` };
   }
 
   /**

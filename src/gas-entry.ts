@@ -237,6 +237,10 @@ function getAllMedia(): unknown[] {
 
   const service = getMediaService();
   const result = service.getAll();
+  const loanService = getLoanService();
+  const loansResult = loanService.getActiveLoans();
+  console.log('-------------')
+  console.log(loansResult)
   return result.success && result.data ? result.data : [];
 }
 
@@ -322,9 +326,11 @@ function getActiveLoansWithDetails(): unknown[] {
   const mediaService = getMediaService();
 
   const loansResult = loanService.getActiveLoans();
+  console.log({loansResult})
   if (!loansResult.success || !loansResult.data) {
     return [];
   }
+  console.log(loansResult.data)
 
   // Enrich with borrower and media names
   const borrowersResult = borrowerService.getAll();
@@ -345,11 +351,15 @@ function getActiveLoansWithDetails(): unknown[] {
     });
   }
 
-  return loansResult.data.map((loan) => ({
+  const result = loansResult.data.map((loan) => ({
     ...loan,
     borrowerName: borrowersMap[loan.borrowerId] || loan.borrowerId,
     mediaTitle: mediaMap[loan.mediaId] || loan.mediaId,
   }));
+
+  console.log(result)
+
+  return result;
 }
 
 /**

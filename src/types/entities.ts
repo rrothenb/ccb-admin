@@ -30,7 +30,7 @@ export interface Media {
   id: string;
   title: string;
   author: string; // Author, director, or creator
-  type: MediaType;
+  type: string;
   isbn: string; // ISBN, barcode, or other identifier
   notes: string;
   genres: string;

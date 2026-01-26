@@ -449,9 +449,10 @@
 
   function editMedia(id) {
     var media = allMedia.find(function (m) {
-      return m.id === id;
+      return m.id == id;
     });
     if (!media) {
+      console.log({id}, allMedia[0])
       showStatus('Media not found', 'error');
       return;
     }
@@ -463,28 +464,58 @@
         '<label for="m-title">Title *</label>' +
         '<input type="text" id="m-title" required value="' + escapeAttr(media.title) + '">' +
         '</div>' +
+      '<div class="form-group">' +
+      '<label for="m-author">Author</label>' +
+      '<input type="text" id="m-author" value="' + escapeAttr(media.author || '') + '">' +
+      '</div>' +
+      '<div class="form-group">' +
+      '<label for="m-type">Type</label>' +
+      '<input type="text" id="m-type" value="' + escapeAttr(media.type || '') + '">' +
+      '</div>' +
         '<div class="form-group">' +
-        '<label for="m-author">Author</label>' +
-        '<input type="text" id="m-author" value="' + escapeAttr(media.author || '') + '">' +
-        '</div>' +
-        '<div class="form-group">' +
-        '<label for="m-type">Type *</label>' +
-        '<select id="m-type" required>' +
-        '<option value="book"' + (media.type === 'book' ? ' selected' : '') + '>Book</option>' +
-        '<option value="dvd"' + (media.type === 'dvd' ? ' selected' : '') + '>DVD</option>' +
-        '<option value="magazine"' + (media.type === 'magazine' ? ' selected' : '') + '>Magazine</option>' +
-        '<option value="audiobook"' + (media.type === 'audiobook' ? ' selected' : '') + '>Audiobook</option>' +
-        '<option value="other"' + (media.type === 'other' ? ' selected' : '') + '>Other</option>' +
-        '</select>' +
-        '</div>' +
-        '<div class="form-group">' +
-        '<label for="m-isbn">ISBN / Barcode</label>' +
+        '<label for="m-isbn">ISBN</label>' +
         '<input type="text" id="m-isbn" value="' + escapeAttr(media.isbn || '') + '">' +
         '</div>' +
         '<div class="form-group">' +
         '<label for="m-notes">Notes</label>' +
         '<textarea id="m-notes" rows="3">' + escapeHtml(media.notes || '') + '</textarea>' +
         '</div>' +
+      '<div class="form-group">' +
+      '<label for="m-genres">Genres</label>' +
+      '<input type="text" id="m-genres" value="' + escapeAttr(media.genres || '') + '">' +
+      '</div>' +
+      '<div class="form-group">' +
+      '<label for="m-date">Date</label>' +
+      '<input type="text" id="m-date" value="' + escapeAttr(media.date || '') + '">' +
+      '</div>' +
+      '<div class="form-group">' +
+      '<label for="m-abstract">Abstract</label>' +
+      '<textarea id="m-abstract" rows="3">' + escapeHtml(media.abstract || '') + '</textarea>' +
+      '</div>' +
+      '<div class="form-group">' +
+      '<label for="m-subjects">Subjects</label>' +
+      '<input type="text" id="m-subjects" value="' + escapeAttr(media.subjects || '') + '">' +
+      '</div>' +
+      '<div class="form-group">' +
+      '<label for="m-description">Description</label>' +
+      '<input type="text" id="m-description" value="' + escapeAttr(media.description || '') + '">' +
+      '</div>' +
+      '<div class="form-group">' +
+      '<label for="m-publisher">Publisher</label>' +
+      '<input type="text" id="m-publisher" value="' + escapeAttr(media.publisher || '') + '">' +
+      '</div>' +
+      '<div class="form-group">' +
+      '<label for="m-place">Place</label>' +
+      '<input type="text" id="m-place" value="' + escapeAttr(media.place || '') + '">' +
+      '</div>' +
+      '<div class="form-group">' +
+      '<label for="m-classification">Classification</label>' +
+      '<input type="text" id="m-classification" value="' + escapeAttr(media.classification || '') + '">' +
+      '</div>' +
+      '<div class="form-group">' +
+      '<label for="m-barcode">Barcode</label>' +
+      '<input type="text" id="m-barcode" value="' + escapeAttr(media.barcode || '') + '">' +
+      '</div>' +
         '<input type="hidden" id="m-id" value="' + media.id + '">' +
         '<button type="submit" class="btn btn-primary">Save Media</button>' +
         '</form>'
