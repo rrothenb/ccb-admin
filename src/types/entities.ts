@@ -17,6 +17,9 @@ export interface Borrower {
   gender: string;
   address: string;
   postcode: string;
+  borrowerType: string;
+  expiryDate: string;
+  memberSince: string;
 }
 
 /** Type of media item */
@@ -29,9 +32,9 @@ export type MediaStatus = 'available' | 'on-loan' | 'lost' | 'damaged' | 'retire
 export interface Media {
   id: string;
   title: string;
-  author: string; // Author, director, or creator
+  author: string;
   type: string;
-  isbn: string; // ISBN, barcode, or other identifier
+  isbn: string;
   notes: string;
   genres: string;
   date: string;
@@ -41,9 +44,8 @@ export interface Media {
   publisher: string;
   place: string;
   classification: string;
-  barcode: string;
+  barcodes: string;
 }
-// id	title	author	type	isbn	notes	genres	date	abstract	subjects	description	publisher	place	classification	barcode
 
 /** Status of a loan */
 export type LoanStatus = 'active' | 'returned' | 'overdue' | 'lost';
@@ -64,11 +66,10 @@ export type SheetName = 'Borrowers' | 'Media' | 'Loans';
 
 /** Column headers for each entity type */
 export const BORROWER_COLUMNS: (keyof Borrower)[] = [
-  'id', 'name', 'email', 'phone', 'gender', 'address', 'postcode', 'status'
+  'id', 'name', 'email', 'phone', 'gender', 'address', 'postcode', 'borrowerType', 'expiryDate', 'memberSince', 'status'
 ];
-
 export const MEDIA_COLUMNS: (keyof Media)[] = [
-  'id', 'title', 'author', 'type', 'isbn', 'notes', 'genres', 'date', 'abstract',	'subjects', 'description', 'publisher', 'place', 'classification', 'barcode'
+  'id', 'title', 'author', 'type', 'isbn', 'notes', 'genres', 'date', 'abstract',	'subjects', 'description', 'publisher', 'place', 'classification', 'barcodes'
 ];
 
 export const LOAN_COLUMNS: (keyof Loan)[] = [

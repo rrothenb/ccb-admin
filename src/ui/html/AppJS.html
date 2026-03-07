@@ -333,15 +333,27 @@
         '</div>' +
       '<div class="form-group">' +
       '<label for="b-gender">Gender</label>' +
-      '<textarea id="b-gender" rows="3">' + escapeHtml(borrower.gender || '') + '</textarea>' +
+      '<input type="text" id="b-gender" value="' + escapeAttr(borrower.gender || '') + '">' +
       '</div>' +
       '<div class="form-group">' +
       '<label for="b-address">Address</label>' +
-      '<textarea id="b-address" rows="3">' + escapeHtml(borrower.address || '') + '</textarea>' +
+      '<input type="text" id="b-address" value="' + escapeAttr(borrower.address || '') + '">' +
       '</div>' +
       '<div class="form-group">' +
       '<label for="b-postcode">Postcode</label>' +
-      '<textarea id="b-postcode" rows="3">' + escapeHtml(borrower.postcode || '') + '</textarea>' +
+      '<input type="text" id="b-postcode" value="' + escapeAttr(borrower.postcode || '') + '">' +
+      '</div>' +
+      '<div class="form-group">' +
+      '<label for="b-borrowerType">Borrower Type</label>' +
+      '<input type="text" id="b-borrowerType" value="' + escapeAttr(borrower.borrowerType || '') + '">' +
+      '</div>' +
+      '<div class="form-group">' +
+      '<label for="b-expiryDate">Expiry Date</label>' +
+      '<input type="text" id="b-expiryDate" value="' + escapeAttr(borrower.expiryDate || '') + '">' +
+      '</div>' +
+      '<div class="form-group">' +
+      '<label for="b-memberSince">Member Since</label>' +
+      '<input type="text" id="b-memberSince" value="' + escapeAttr(borrower.memberSince || '') + '">' +
       '</div>' +
         '<input type="hidden" id="b-id" value="' + borrower.id + '">' +
         '<button type="submit" class="btn btn-primary">Save Borrower</button>' +
@@ -434,7 +446,7 @@
         '</select>' +
         '</div>' +
         '<div class="form-group">' +
-        '<label for="m-isbn">ISBN / Barcode</label>' +
+        '<label for="m-isbn">ISBN</label>' +
         '<input type="text" id="m-isbn">' +
         '</div>' +
         '<div class="form-group">' +
@@ -513,8 +525,8 @@
       '<input type="text" id="m-classification" value="' + escapeAttr(media.classification || '') + '">' +
       '</div>' +
       '<div class="form-group">' +
-      '<label for="m-barcode">Barcode</label>' +
-      '<input type="text" id="m-barcode" value="' + escapeAttr(media.barcode || '') + '">' +
+      '<label for="m-barcodes">Barcodes</label>' +
+      '<input type="text" id="m-barcodes" value="' + escapeAttr(media.barcodes || '') + '">' +
       '</div>' +
         '<input type="hidden" id="m-id" value="' + media.id + '">' +
         '<button type="submit" class="btn btn-primary">Save Media</button>' +
