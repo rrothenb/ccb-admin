@@ -101,7 +101,7 @@
         renderLoans(allLoans);
       })
       .withFailureHandler(handleError)
-      .getActiveLoansWithDetails();
+      .getActiveLoans();
   }
 
   // ============================================================================
@@ -178,9 +178,9 @@
         return (
           '<tr data-id="' + l.id + '">' +
           '<td>' + escapeHtml(l.borrowerName || l.borrowerId) + '</td>' +
-          '<td>' + escapeHtml(l.mediaTitle || l.mediaId) + '</td>' +
-          '<td>' + escapeHtml(l.checkoutDate) + '</td>' +
-          '<td>' + escapeHtml(l.dueDate) + '</td>' +
+          '<td>' + escapeHtml(l.mediaTitle || l.barcode) + '</td>' +
+          '<td>' + escapeHtml(l.checkout) + '</td>' +
+          '<td>' + escapeHtml(l.due) + '</td>' +
           '<td><span class="status-badge status-' + l.status + '">' + l.status + '</span></td>' +
           '<td class="actions-cell">' +
           '<button class="btn btn-success" onclick="returnLoan(\'' + l.id + '\')">Return</button>' +
@@ -626,7 +626,7 @@
     showStatus('Processing checkout...', 'loading');
 
     var borrowerId = document.getElementById('c-borrower').value;
-    var mediaId = document.getElementById('c-media').value;
+    var barcode = document.getElementById('c-media').value;
     var days = parseInt(document.getElementById('c-days').value) || 14;
 
     google.script.run
@@ -641,7 +641,7 @@
         }
       })
       .withFailureHandler(handleError)
-      .processCheckout(borrowerId, mediaId, days);
+      .processCheckout(borrowerId, barcode, days);
   }
 
   function returnLoan(id) {

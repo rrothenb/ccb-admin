@@ -24,7 +24,7 @@ class LoanService extends BaseEntityService<Loan> {
    */
   checkout(
     borrowerId: string,
-    mediaId: string,
+    barcode: string,
     loanDays: number = DEFAULT_LOAN_DAYS
   ): OperationResult<Loan> {
     // Validate borrower
@@ -39,7 +39,7 @@ class LoanService extends BaseEntityService<Loan> {
 
     // Validate media
     const mediaService = getMediaService();
-    const mediaCheck = mediaService.isAvailable(mediaId);
+    const mediaCheck = mediaService.isAvailable(barcode);
     if (!mediaCheck.success) {
       return { success: false, error: mediaCheck.error };
     }
@@ -49,18 +49,18 @@ class LoanService extends BaseEntityService<Loan> {
 
     // Calculate dates
     const today = new Date();
-    const dueDate = new Date(today);
-    dueDate.setDate(dueDate.getDate() + loanDays);
+    const due = new Date(today);
+    due.setDate(due.getDate() + loanDays);
 
-    const checkoutDate = Utilities.formatDate(today, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-    const dueDateStr = Utilities.formatDate(dueDate, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    const checkout = Utilities.formatDate(today, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    const dueDateStr = Utilities.formatDate(due, Session.getScriptTimeZone(), 'yyyy-MM-dd');
 
     // Create the loan
     const loanResult = this.create({
       borrowerId,
-      mediaId,
-      checkoutDate,
-      dueDate: dueDateStr,
+      barcode,
+      checkout,
+      due: dueDateStr,
       returnDate: '',
       status: 'active' as LoanStatus,
     });
@@ -70,7 +70,7 @@ class LoanService extends BaseEntityService<Loan> {
     }
 
     // Update media status
-    const mediaUpdate = mediaService.markAsOnLoan(mediaId);
+    const mediaUpdate = mediaService.markAsOnLoan(barcode);
     if (!mediaUpdate.success) {
       // Rollback loan creation
       if (loanResult.data) {
@@ -111,7 +111,7 @@ class LoanService extends BaseEntityService<Loan> {
 
     // Update media status
     const mediaService = getMediaService();
-    const mediaUpdate = mediaService.markAsAvailable(loan.mediaId);
+    const mediaUpdate = mediaService.markAsAvailable(loan.barcode);
     if (!mediaUpdate.success) {
       Logger.log(`Warning: Failed to update media status: ${mediaUpdate.error}`);
     }
@@ -135,24 +135,18 @@ class LoanService extends BaseEntityService<Loan> {
     }
 
     // Calculate new due date
-    const currentDue = new Date(loan.dueDate);
+    const currentDue = new Date(loan.due);
     currentDue.setDate(currentDue.getDate() + additionalDays);
     const newDueDate = Utilities.formatDate(currentDue, Session.getScriptTimeZone(), 'yyyy-MM-dd');
 
-    return this.update(loanId, { dueDate: newDueDate });
+    return this.update(loanId, { due: newDueDate });
   }
 
   /**
    * Gets all active loans
    */
   getActiveLoans(): OperationResult<Loan[]> {
-    const result = this.getAll();
-    if (!result.success || !result.data) {
-      return result;
-    }
-
-    const active = result.data.filter((l) => l.status === 'active');
-    return { success: true, data: active };
+    return this.getAll();
   }
 
   /**
@@ -169,8 +163,8 @@ class LoanService extends BaseEntityService<Loan> {
 
     const overdue = result.data.filter((l) => {
       if (l.status !== 'active') return false;
-      const dueDate = new Date(l.dueDate);
-      return dueDate < today;
+      const due = new Date(l.due);
+      return due < today;
     });
 
     return { success: true, data: overdue };
@@ -205,14 +199,14 @@ class LoanService extends BaseEntityService<Loan> {
   /**
    * Gets the current loan for a media item (if any)
    */
-  getCurrentLoanForMedia(mediaId: string): OperationResult<Loan | null> {
+  getCurrentLoanForMedia(barcode: string): OperationResult<Loan | null> {
     const result = this.getAll();
     if (!result.success || !result.data) {
       return { success: false, error: result.error };
     }
 
     const activeLoan = result.data.find(
-      (l) => l.mediaId === mediaId && l.status === 'active'
+      (l) => l.barcode === barcode && l.status === 'active'
     );
 
     return { success: true, data: activeLoan || null };
@@ -235,8 +229,8 @@ class LoanService extends BaseEntityService<Loan> {
 
     for (const loan of result.data) {
       if (loan.status === 'active') {
-        const dueDate = new Date(loan.dueDate);
-        if (dueDate < today) {
+        const due = new Date(loan.due);
+        if (due < today) {
           const updateResult = this.update(loan.id, { status: 'overdue' as LoanStatus });
           if (updateResult.success) {
             updatedCount++;

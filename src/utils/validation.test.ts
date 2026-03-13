@@ -127,9 +127,9 @@ describe('Validation Utilities', () => {
     it('should validate a complete loan', () => {
       const result = validateLoan({
         borrowerId: 'borrower-123',
-        mediaId: 'media-456',
-        checkoutDate: '2024-01-15',
-        dueDate: '2024-01-29',
+        barcode: 'media-456',
+        checkout: '2024-01-15',
+        due: '2024-01-29',
         status: 'active',
       });
 
@@ -139,14 +139,14 @@ describe('Validation Utilities', () => {
 
     it('should require borrowerId', () => {
       const result = validateLoan({
-        mediaId: 'media-456',
+        barcode: 'media-456',
       });
 
       expect(result.valid).toBe(false);
       expect(result.errors).toContain('Borrower ID is required');
     });
 
-    it('should require mediaId', () => {
+    it('should require barcode', () => {
       const result = validateLoan({
         borrowerId: 'borrower-123',
       });
@@ -158,9 +158,9 @@ describe('Validation Utilities', () => {
     it('should validate that due date is after checkout date', () => {
       const result = validateLoan({
         borrowerId: 'borrower-123',
-        mediaId: 'media-456',
-        checkoutDate: '2024-01-29',
-        dueDate: '2024-01-15', // Before checkout
+        barcode: 'media-456',
+        checkout: '2024-01-29',
+        due: '2024-01-15', // Before checkout
       });
 
       expect(result.valid).toBe(false);
@@ -170,9 +170,9 @@ describe('Validation Utilities', () => {
     it('should allow empty return date', () => {
       const result = validateLoan({
         borrowerId: 'borrower-123',
-        mediaId: 'media-456',
-        checkoutDate: '2024-01-15',
-        dueDate: '2024-01-29',
+        barcode: 'media-456',
+        checkout: '2024-01-15',
+        due: '2024-01-29',
         returnDate: '',
       });
 
@@ -185,9 +185,9 @@ describe('Validation Utilities', () => {
       const loan: Loan = {
         id: 'loan-1',
         borrowerId: 'borrower-1',
-        mediaId: 'media-1',
-        checkoutDate: '2024-01-15',
-        dueDate: '2024-01-29',
+        barcode: 'media-1',
+        checkout: '2024-01-15',
+        due: '2024-01-29',
         returnDate: '',
         status: 'active',
       };
@@ -200,9 +200,9 @@ describe('Validation Utilities', () => {
       const loan: Loan = {
         id: 'loan-1',
         borrowerId: 'borrower-1',
-        mediaId: 'media-1',
-        checkoutDate: '2024-01-15',
-        dueDate: '2024-01-29',
+        barcode: 'media-1',
+        checkout: '2024-01-15',
+        due: '2024-01-29',
         returnDate: '',
         status: 'active',
       };
@@ -215,9 +215,9 @@ describe('Validation Utilities', () => {
       const loan: Loan = {
         id: 'loan-1',
         borrowerId: 'borrower-1',
-        mediaId: 'media-1',
-        checkoutDate: '2024-01-15',
-        dueDate: '2024-01-29',
+        barcode: 'media-1',
+        checkout: '2024-01-15',
+        due: '2024-01-29',
         returnDate: '2024-02-05',
         status: 'returned',
       };
@@ -232,9 +232,9 @@ describe('Validation Utilities', () => {
       const loan: Loan = {
         id: 'loan-1',
         borrowerId: 'borrower-1',
-        mediaId: 'media-1',
-        checkoutDate: '2024-01-15',
-        dueDate: '2024-01-29',
+        barcode: 'media-1',
+        checkout: '2024-01-15',
+        due: '2024-01-29',
         returnDate: '',
         status: 'active',
       };
@@ -247,9 +247,9 @@ describe('Validation Utilities', () => {
       const loan: Loan = {
         id: 'loan-1',
         borrowerId: 'borrower-1',
-        mediaId: 'media-1',
-        checkoutDate: '2024-01-15',
-        dueDate: '2024-01-29',
+        barcode: 'media-1',
+        checkout: '2024-01-15',
+        due: '2024-01-29',
         returnDate: '',
         status: 'active',
       };
@@ -274,16 +274,16 @@ describe('Validation Utilities', () => {
   describe('calculateDueDate', () => {
     it('should calculate due date correctly', () => {
       const checkout = new Date('2024-01-15');
-      const dueDate = calculateDueDate(checkout, 14);
+      const due = calculateDueDate(checkout, 14);
 
-      expect(formatDateString(dueDate)).toBe('2024-01-29');
+      expect(formatDateString(due)).toBe('2024-01-29');
     });
 
     it('should handle month rollover', () => {
       const checkout = new Date('2024-01-25');
-      const dueDate = calculateDueDate(checkout, 14);
+      const due = calculateDueDate(checkout, 14);
 
-      expect(formatDateString(dueDate)).toBe('2024-02-08');
+      expect(formatDateString(due)).toBe('2024-02-08');
     });
   });
 });

@@ -51,9 +51,9 @@ describe('Entity Column Definitions', () => {
       expect(LOAN_COLUMNS).toEqual([
         'id',
         'borrowerId',
-        'mediaId',
-        'checkoutDate',
-        'dueDate',
+        'barcode',
+        'checkout',
+        'due',
         'returnDate',
         'status',
       ]);

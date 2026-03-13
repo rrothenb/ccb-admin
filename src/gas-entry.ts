@@ -60,7 +60,7 @@ function showConfig(): void {
 
   Logger.log(`Current Configuration:
 Borrowers ID: ${config.borrowersId || '(not set)'}
-Media ID: ${config.mediaId || '(not set)'}
+Media ID: ${config.barcode || '(not set)'}
 Loans ID: ${config.loansId || '(not set)'}
 Access Control ID: ${getAccessControlSpreadsheetId() || '(not set)'}
 Last Discovery: ${config.lastDiscoveryDate || '(never)'}`);
@@ -314,52 +314,23 @@ function saveMedia(mediaData: {
 // ============================================================================
 
 /**
- * Gets active loans with borrower and media details
+ * Gets active loans
  */
-function getActiveLoansWithDetails(): unknown[] {
+function getActiveLoans(): unknown[] {
   requireAccess();
   const user = Session.getActiveUser().getEmail();
-  Logger.log(`[AUDIT] ${user} retrieved active loans with details`);
+  Logger.log(`[AUDIT] ${user} retrieved active loans`);
 
   const loanService = getLoanService();
-  const borrowerService = getBorrowerService();
-  const mediaService = getMediaService();
 
   const loansResult = loanService.getActiveLoans();
-  console.log({loansResult})
   if (!loansResult.success || !loansResult.data) {
     return [];
   }
-  console.log(loansResult.data)
+  console.log(loansResult.data.length)
+  console.log(loansResult.data[0])
 
-  // Enrich with borrower and media names
-  const borrowersResult = borrowerService.getAll();
-  const mediaResult = mediaService.getAll();
-
-  const borrowersMap: Record<string, string> = {};
-  const mediaMap: Record<string, string> = {};
-
-  if (borrowersResult.success && borrowersResult.data) {
-    borrowersResult.data.forEach((b) => {
-      borrowersMap[b.id] = b.name;
-    });
-  }
-
-  if (mediaResult.success && mediaResult.data) {
-    mediaResult.data.forEach((m) => {
-      mediaMap[m.id] = m.title;
-    });
-  }
-
-  const result = loansResult.data.map((loan) => ({
-    ...loan,
-    borrowerName: borrowersMap[loan.borrowerId] || loan.borrowerId,
-    mediaTitle: mediaMap[loan.mediaId] || loan.mediaId,
-  }));
-
-  console.log(result)
-
-  return result;
+  return loansResult.data;
 }
 
 /**
@@ -380,15 +351,15 @@ function getOverdueLoans(): unknown[] {
  */
 function processCheckout(
   borrowerId: string,
-  mediaId: string,
+  barcode: string,
   loanDays: number = 14
 ): { success: boolean; error?: string } {
   requireAccess();
   const user = Session.getActiveUser().getEmail();
-  Logger.log(`[AUDIT] ${user} processed checkout: borrower=${borrowerId}, media=${mediaId}, days=${loanDays}`);
+  Logger.log(`[AUDIT] ${user} processed checkout: borrower=${borrowerId}, media=${barcode}, days=${loanDays}`);
 
   const service = getLoanService();
-  const result = service.checkout(borrowerId, mediaId, loanDays);
+  const result = service.checkout(borrowerId, barcode, loanDays);
   return { success: result.success, error: result.error };
 }
 
@@ -450,7 +421,7 @@ function extendLoan(loanId: string, days: number): { success: boolean; error?: s
 (globalThis as Record<string, unknown>).saveMedia = saveMedia;
 
 // Loan functions
-(globalThis as Record<string, unknown>).getActiveLoansWithDetails = getActiveLoansWithDetails;
+(globalThis as Record<string, unknown>).getActiveLoans = getActiveLoans;
 (globalThis as Record<string, unknown>).getOverdueLoans = getOverdueLoans;
 (globalThis as Record<string, unknown>).processCheckout = processCheckout;
 (globalThis as Record<string, unknown>).returnLoanById = returnLoanById;

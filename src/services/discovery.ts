@@ -145,17 +145,17 @@ function getMasterConfig(): MasterSpreadsheetConfig | null {
   const props = PropertiesService.getScriptProperties();
 
   const borrowersId = props.getProperty(PROPERTY_KEYS.BORROWERS_SPREADSHEET_ID);
-  const mediaId = props.getProperty(PROPERTY_KEYS.MEDIA_SPREADSHEET_ID);
+  const barcode = props.getProperty(PROPERTY_KEYS.MEDIA_SPREADSHEET_ID);
   const loansId = props.getProperty(PROPERTY_KEYS.LOANS_SPREADSHEET_ID);
   const lastDiscoveryDate = props.getProperty(PROPERTY_KEYS.LAST_DISCOVERY_DATE);
 
-  if (!borrowersId && !mediaId && !loansId) {
+  if (!borrowersId && !barcode && !loansId) {
     return null;
   }
 
   return {
     borrowersId: borrowersId || '',
-    mediaId: mediaId || '',
+    barcode: barcode || '',
     loansId: loansId || '',
     lastDiscoveryDate: lastDiscoveryDate || '',
   };

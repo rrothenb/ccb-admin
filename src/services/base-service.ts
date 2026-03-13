@@ -61,7 +61,6 @@ class BaseEntityService<T extends Entity> {
     console.log(this.columns)
     for (let i = 1; i < data.length; i++) {
       const entity = this.rowToEntity(data[i]);
-      console.log(`Found entity`, entity);
       if (entity) {
         entities.push(entity);
       }

@@ -93,15 +93,15 @@ function validateLoan(loan: Partial<Loan>): ValidationResult {
     errors.push('Borrower ID is required');
   }
 
-  if (!loan.mediaId || loan.mediaId.trim().length === 0) {
+  if (!loan.barcode || loan.barcode.trim().length === 0) {
     errors.push('Media ID is required');
   }
 
-  if (loan.checkoutDate && !DATE_REGEX.test(loan.checkoutDate)) {
+  if (loan.checkout && !DATE_REGEX.test(loan.checkout)) {
     errors.push('Checkout date must be in yyyy-MM-dd format');
   }
 
-  if (loan.dueDate && !DATE_REGEX.test(loan.dueDate)) {
+  if (loan.due && !DATE_REGEX.test(loan.due)) {
     errors.push('Due date must be in yyyy-MM-dd format');
   }
 
@@ -114,9 +114,9 @@ function validateLoan(loan: Partial<Loan>): ValidationResult {
   }
 
   // Business rule: due date must be after checkout date
-  if (loan.checkoutDate && loan.dueDate) {
-    const checkout = new Date(loan.checkoutDate);
-    const due = new Date(loan.dueDate);
+  if (loan.checkout && loan.due) {
+    const checkout = new Date(loan.checkout);
+    const due = new Date(loan.due);
     if (due <= checkout) {
       errors.push('Due date must be after checkout date');
     }
@@ -136,10 +136,10 @@ function isLoanOverdue(loan: Loan, currentDate: Date = new Date()): boolean {
     return false;
   }
 
-  const dueDate = new Date(loan.dueDate);
-  dueDate.setHours(23, 59, 59, 999); // End of due day
+  const due = new Date(loan.due);
+  due.setHours(23, 59, 59, 999); // End of due day
 
-  return currentDate > dueDate;
+  return currentDate > due;
 }
 
 /**
@@ -150,8 +150,8 @@ function getDaysOverdue(loan: Loan, currentDate: Date = new Date()): number {
     return 0;
   }
 
-  const dueDate = new Date(loan.dueDate);
-  const diffTime = currentDate.getTime() - dueDate.getTime();
+  const due = new Date(loan.due);
+  const diffTime = currentDate.getTime() - due.getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
   return Math.max(0, diffDays);
@@ -170,10 +170,10 @@ function formatDateString(date: Date): string {
 /**
  * Calculates a due date given a checkout date and loan period
  */
-function calculateDueDate(checkoutDate: Date, loanDays: number): Date {
-  const dueDate = new Date(checkoutDate);
-  dueDate.setDate(dueDate.getDate() + loanDays);
-  return dueDate;
+function calculateDueDate(checkout: Date, loanDays: number): Date {
+  const due = new Date(checkout);
+  due.setDate(due.getDate() + loanDays);
+  return due;
 }
 
 export {

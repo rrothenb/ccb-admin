@@ -7,7 +7,7 @@ import { SheetName } from './entities';
 /** Configuration for master spreadsheet connections */
 export interface MasterSpreadsheetConfig {
   borrowersId: string;
-  mediaId: string;
+  barcode: string;
   loansId: string;
   lastDiscoveryDate: string; // ISO date string
 }
