@@ -76,18 +76,49 @@
       .getActiveBorrowers();
   }
 
-  function loadMedia() {
+async function decompressFromServer(compressed) {
+  var binaryString = atob(compressed);
+  var bytes = new Uint8Array(binaryString.length);
+  for (var i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  var ds = new DecompressionStream('gzip');
+  var writer = ds.writable.getWriter();
+  writer.write(bytes);
+  writer.close();
+  var reader = ds.readable.getReader();
+  var chunks = [];
+  while (true) {
+    var result = await reader.read();
+    if (result.done) break;
+    chunks.push(result.value);
+  }
+  var totalLength = chunks.reduce(function(sum, c) { return sum + c.length; }, 0);
+  var merged = new Uint8Array(totalLength);
+  var offset = 0;
+  chunks.forEach(function(chunk) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  });
+  return JSON.parse(new TextDecoder().decode(merged));
+}
+
+function loadMedia() {
+    console.log('in loadMedia...')
     document.getElementById('media-tbody').innerHTML =
       '<tr><td colspan="5" class="loading">Loading...</td></tr>';
 
-    google.script.run
-      .withSuccessHandler(function (media) {
+  google.script.run
+    .withSuccessHandler(function (compressed) {
+      decompressFromServer(compressed).then(function (media) {
+        console.log('success', media)
         allMedia = media || [];
         renderMedia(allMedia);
-      })
-      .withFailureHandler(handleError)
-      .getAllMedia();
-  }
+      }).catch(handleError);
+    })
+    .withFailureHandler(handleError)
+    .getAllMedia();
+}
 
   function loadLoans() {
     document.getElementById('loans-tbody').innerHTML =
@@ -143,7 +174,7 @@
       tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No media found</td></tr>';
       return;
     }
-
+    console.log({function: 'renderMedia', mediaLength: media.length})
     tbody.innerHTML = media
       .map(function (m) {
         return (
@@ -220,6 +251,7 @@
   }
 
   function searchMediaUI() {
+    console.log('in searchMediaUI...')
     var query = document.getElementById('media-search').value.trim().toLowerCase();
     if (!query) {
       renderMedia(allMedia);
@@ -236,6 +268,7 @@
   }
 
   function clearMediaSearch() {
+    console.log('in clearMediaSearch...')
     document.getElementById('media-search').value = '';
     renderMedia(allMedia);
   }
@@ -718,6 +751,7 @@
   }
 
   function handleError(error) {
+    console.log('in handleError...')
     showStatus(error.message || 'An error occurred', 'error');
     console.error(error);
   }

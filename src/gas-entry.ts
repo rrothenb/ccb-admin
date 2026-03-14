@@ -237,13 +237,23 @@ function getAllMedia(): unknown[] {
 
   const service = getMediaService();
   const result = service.getAll();
-  const loanService = getLoanService();
-  const loansResult = loanService.getActiveLoans();
-  console.log('-------------')
-  console.log(loansResult)
-  return result.success && result.data ? result.data : [];
-}
+  const data = result.success && result.data ? result.data : [];
 
+  const results = data.map(item => {
+    const clean: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(item)) {
+      if (value !== '' && value !== null && value !== undefined) {
+        clean[key] = value;
+      }
+    }
+    return clean;
+  });
+  console.log(results.slice(0,5))
+  const json = JSON.stringify(results);
+  const blob = Utilities.newBlob(json, 'application/json');
+  const gzipped = Utilities.gzip(blob);
+  return Utilities.base64Encode(gzipped.getBytes());
+}
 /**
  * Gets available media (not on loan)
  */
