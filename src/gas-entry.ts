@@ -230,24 +230,36 @@ function activateBorrowerById(id: string): { success: boolean; error?: string } 
 /**
  * Gets all media
  */
-function getAllMedia(): unknown[] {
+function getAllMedia(): string {
   requireAccess();
   const user = Session.getActiveUser().getEmail();
   Logger.log(`[AUDIT] ${user} retrieved all media`);
 
-  const service = getMediaService();
-  const result = service.getAll();
+  const mediaService = getMediaService();
+  const result = mediaService.getAll();
   const data = result.success && result.data ? result.data : [];
 
-  const results = data.map(item => {
-    const clean: Record<string, unknown> = {};
+  const results: (Partial<typeof data[number]> & { status?: string })[] = data.map(item => {
+    const clean: Partial<typeof data[number]> = {};
     for (const [key, value] of Object.entries(item)) {
       if (value !== '' && value !== null && value !== undefined) {
-        clean[key] = value;
+        clean[key as keyof typeof item] = value;
       }
     }
     return clean;
-  });
+  }).filter(item => item.barcodes);
+  const loanService = getLoanService();
+  const loanResult = loanService.getAll();
+  const loans = loanResult.success && loanResult.data ? loanResult.data : [];
+  const loanedBarcodes = loans.map(loan => loan.barcode);
+  console.log(loanedBarcodes.slice(0,5))
+  console.log(results.slice(0,5))
+  for (const resource of results) {
+    console.log(resource)
+    console.log(resource.barcodes)
+    console.log(resource.barcodes?.split('|'))
+    resource.status = resource.barcodes?.split('|').some(barcode => !loanedBarcodes.includes(barcode)) ? 'Available' : 'On Loan';
+  }
   console.log(results.slice(0,5))
   const json = JSON.stringify(results);
   const blob = Utilities.newBlob(json, 'application/json');
