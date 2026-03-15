@@ -258,7 +258,7 @@ function getAllMedia(): string {
     console.log(resource)
     console.log(resource.barcodes)
     console.log(resource.barcodes?.split('|'))
-    resource.status = resource.barcodes?.split('|').some(barcode => !loanedBarcodes.includes(barcode)) ? 'Available' : 'On Loan';
+    resource.status = resource.barcodes?.split('|').some(barcode => !loanedBarcodes.includes(barcode)) ? 'available' : 'on-loan';
   }
   console.log(results.slice(0,5))
   const json = JSON.stringify(results);
