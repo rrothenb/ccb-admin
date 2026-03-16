@@ -59,9 +59,8 @@ class LoanService extends BaseEntityService<Loan> {
     const loanResult = this.create({
       borrowerId,
       barcode,
-      checkout,
-      due: dueDateStr,
-      returnDate: '',
+      checkoutDate: checkout,
+      dueDate: dueDateStr,
       status: 'active' as LoanStatus,
     });
 
@@ -130,16 +129,17 @@ class LoanService extends BaseEntityService<Loan> {
 
     const loan = loanResult.data;
 
-    if (loan.status !== 'active') {
+    if (!['out', 'overdue'].includes(loan.status)) {
       return { success: false, error: 'Can only extend active loans' };
     }
 
     // Calculate new due date
-    const currentDue = new Date(loan.due);
+    const currentDue = new Date(loan.dueDate);
     currentDue.setDate(currentDue.getDate() + additionalDays);
+    // TODO standardize date format
     const newDueDate = Utilities.formatDate(currentDue, Session.getScriptTimeZone(), 'yyyy-MM-dd');
 
-    return this.update(loanId, { due: newDueDate });
+    return this.update(loanId, { dueDate: newDueDate });
   }
 
   /**
@@ -163,7 +163,7 @@ class LoanService extends BaseEntityService<Loan> {
 
     const overdue = result.data.filter((l) => {
       if (l.status !== 'active') return false;
-      const due = new Date(l.due);
+      const due = new Date(l.dueDate);
       return due < today;
     });
 
@@ -229,7 +229,7 @@ class LoanService extends BaseEntityService<Loan> {
 
     for (const loan of result.data) {
       if (loan.status === 'active') {
-        const due = new Date(loan.due);
+        const due = new Date(loan.dueDate);
         if (due < today) {
           const updateResult = this.update(loan.id, { status: 'overdue' as LoanStatus });
           if (updateResult.success) {

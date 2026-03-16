@@ -132,7 +132,7 @@ function getAllBorrowers(): unknown[] {
 
   const service = getBorrowerService();
   const result = service.getAll();
-  return result.success && result.data ? result.data : [];
+  return result.success && result.data ? result.data.sort((a, b) => a.name.localeCompare(b.name)) : [];
 }
 
 /**
@@ -145,7 +145,8 @@ function getActiveBorrowers(): unknown[] {
 
   const service = getBorrowerService();
   const result = service.getActiveBorrowers();
-  return result.success && result.data ? result.data : [];
+  console.log({borrowersLength: result.data?.length})
+  return result.success && result.data ? result.data.sort((a, b) => a.name.localeCompare(b.name)) : [];
 }
 
 /**

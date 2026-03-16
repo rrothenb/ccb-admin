@@ -141,7 +141,7 @@ function loadMedia() {
 
   function renderBorrowers(borrowers) {
     var tbody = document.getElementById('borrowers-tbody');
-
+    console.log({borrowers})
     if (!borrowers || borrowers.length === 0) {
       tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No borrowers found</td></tr>';
       return;

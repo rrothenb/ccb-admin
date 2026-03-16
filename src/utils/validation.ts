@@ -101,7 +101,7 @@ function validateLoan(loan: Partial<Loan>): ValidationResult {
     errors.push('Checkout date must be in yyyy-MM-dd format');
   }
 
-  if (loan.due && !DATE_REGEX.test(loan.due)) {
+  if (loan.dueDate && !DATE_REGEX.test(loan.dueDate)) {
     errors.push('Due date must be in yyyy-MM-dd format');
   }
 
@@ -114,9 +114,9 @@ function validateLoan(loan: Partial<Loan>): ValidationResult {
   }
 
   // Business rule: due date must be after checkout date
-  if (loan.checkout && loan.due) {
-    const checkout = new Date(loan.checkout);
-    const due = new Date(loan.due);
+  if (loan.checkoutDate && loan.dueDate) {
+    const checkout = new Date(loan.checkoutDate);
+    const due = new Date(loan.dueDate);
     if (due <= checkout) {
       errors.push('Due date must be after checkout date');
     }
@@ -136,7 +136,7 @@ function isLoanOverdue(loan: Loan, currentDate: Date = new Date()): boolean {
     return false;
   }
 
-  const due = new Date(loan.due);
+  const due = new Date(loan.dueDate);
   due.setHours(23, 59, 59, 999); // End of due day
 
   return currentDate > due;

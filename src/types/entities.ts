@@ -52,10 +52,11 @@ export type LoanStatus = 'active' | 'returned' | 'overdue' | 'lost';
 
 /** A loan record */
 export interface Loan {
+  id: string;
   barcode: string;
   title: string
-  checkout: string;
-  due: string;
+  checkoutDate: string;
+  dueDate: string;
   borrowerName: string;
   borrowerId: string
   status: LoanStatus;
@@ -73,7 +74,7 @@ export const MEDIA_COLUMNS: (keyof Media)[] = [
 ];
 
 export const LOAN_COLUMNS: (keyof Loan)[] = [
-  'barcode', 'title', 'checkout', 'due', 'borrowerName', 'borrowerId', 'status'
+  'id', 'barcode', 'title', 'checkoutDate', 'dueDate', 'borrowerName', 'borrowerId', 'status'
 ];
 
 /** Map of sheet names to their expected master spreadsheet name prefix */
