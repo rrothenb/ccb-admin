@@ -259,8 +259,9 @@ function loadMedia() {
     }
 
     var filtered = allMedia.filter(function (m) {
+      console.log(m.title)
       return (
-        (m.title && m.title.toLowerCase().indexOf(query) !== -1) ||
+        (m.title && `${m.title}`.toLowerCase().indexOf(query) !== -1) ||
         (m.author && m.author.toLowerCase().indexOf(query) !== -1)
       );
     });
