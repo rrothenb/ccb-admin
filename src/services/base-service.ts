@@ -192,7 +192,16 @@ class BaseEntityService<T extends Entity> {
 
     const entity: Record<string, unknown> = {};
     for (let i = 0; i < this.columns.length; i++) {
-      entity[this.columns[i] as string] = row[i];
+      const value = row[i];
+      if (value instanceof Date) {
+        entity[this.columns[i] as string] = Utilities.formatDate(
+          value,
+          Session.getScriptTimeZone(),
+          'MMMM d, yyyy'
+        );
+      } else {
+        entity[this.columns[i] as string] = value;
+      }
     }
 
     return entity as T;

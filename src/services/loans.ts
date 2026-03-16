@@ -52,8 +52,8 @@ class LoanService extends BaseEntityService<Loan> {
     const due = new Date(today);
     due.setDate(due.getDate() + loanDays);
 
-    const checkout = Utilities.formatDate(today, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-    const dueDateStr = Utilities.formatDate(due, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    const checkout = Utilities.formatDate(today, Session.getScriptTimeZone(), 'MMMM d, yyyy');
+    const dueDateStr = Utilities.formatDate(due, Session.getScriptTimeZone(), 'MMMM d, yyyy');
 
     // Create the loan
     const loanResult = this.create({
@@ -98,7 +98,7 @@ class LoanService extends BaseEntityService<Loan> {
     }
 
     // Update the loan
-    const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMMM d, yyyy');
     const updateResult = this.update(loanId, {
       returnDate: today,
       status: 'returned' as LoanStatus,
@@ -137,7 +137,7 @@ class LoanService extends BaseEntityService<Loan> {
     const currentDue = new Date(loan.dueDate);
     currentDue.setDate(currentDue.getDate() + additionalDays);
     // TODO standardize date format
-    const newDueDate = Utilities.formatDate(currentDue, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    const newDueDate = Utilities.formatDate(currentDue, Session.getScriptTimeZone(), 'MMMM d, yyyy');
 
     return this.update(loanId, { dueDate: newDueDate });
   }

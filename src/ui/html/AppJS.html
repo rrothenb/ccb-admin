@@ -212,8 +212,8 @@ function loadMedia() {
           '<td>' + escapeHtml(l.borrowerId) + '</td>' +
           '<td>' + escapeHtml(l.title) + '</td>' +
           '<td>' + escapeHtml(l.barcode) + '</td>' +
-          '<td>' + escapeHtml(l.checkout) + '</td>' +
-          '<td>' + escapeHtml(l.due) + '</td>' +
+          '<td>' + escapeHtml(l.checkoutDate) + '</td>' +
+          '<td>' + escapeHtml(l.dueDate) + '</td>' +
           '<td><span class="status-badge status-' + l.status + '">' + l.status + '</span></td>' +
           '<td class="actions-cell">' +
           '<button class="btn btn-success" onclick="returnLoan(\'' + l.id + '\')">Return</button>' +

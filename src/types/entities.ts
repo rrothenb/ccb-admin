@@ -12,7 +12,7 @@ export interface Borrower {
   email: string;
   phone: string;
   status: BorrowerStatus;
-  joinDate: string; // ISO date string (yyyy-MM-dd)
+  joinDate: string; // ISO date string (MMMM d, yyyy)
   notes: string;
   gender: string;
   address: string;

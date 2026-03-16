@@ -75,7 +75,7 @@ describe('Validation Utilities', () => {
       });
 
       expect(result.valid).toBe(false);
-      expect(result.errors).toContain('Join date must be in yyyy-MM-dd format');
+      expect(result.errors).toContain('Join date must be in MMMM d, yyyy format');
     });
   });
 

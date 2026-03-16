@@ -22,7 +22,7 @@ class BorrowerService extends BaseEntityService<Borrower> {
     phone: string = '',
     notes: string = ''
   ): OperationResult<Borrower> {
-    const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMMM d, yyyy');
 
     return this.create({
       name,

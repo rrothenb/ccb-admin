@@ -18,7 +18,7 @@ const VALID_LOAN_STATUSES: LoanStatus[] = ['active', 'returned', 'overdue', 'los
 /** Email validation regex */
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** Date string validation regex (yyyy-MM-dd) */
+/** Date string validation regex (MMMM d, yyyy) */
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
@@ -50,7 +50,7 @@ function validateBorrower(borrower: Partial<Borrower>): ValidationResult {
   }
 
   if (borrower.joinDate && !DATE_REGEX.test(borrower.joinDate)) {
-    errors.push('Join date must be in yyyy-MM-dd format');
+    errors.push('Join date must be in MMMM d, yyyy format');
   }
 
   return {
@@ -98,15 +98,15 @@ function validateLoan(loan: Partial<Loan>): ValidationResult {
   }
 
   if (loan.checkout && !DATE_REGEX.test(loan.checkout)) {
-    errors.push('Checkout date must be in yyyy-MM-dd format');
+    errors.push('Checkout date must be in MMMM d, yyyy format');
   }
 
   if (loan.dueDate && !DATE_REGEX.test(loan.dueDate)) {
-    errors.push('Due date must be in yyyy-MM-dd format');
+    errors.push('Due date must be in MMMM d, yyyy format');
   }
 
   if (loan.returnDate && loan.returnDate.length > 0 && !DATE_REGEX.test(loan.returnDate)) {
-    errors.push('Return date must be in yyyy-MM-dd format');
+    errors.push('Return date must be in MMMM d, yyyy format');
   }
 
   if (loan.status && !VALID_LOAN_STATUSES.includes(loan.status)) {
@@ -158,7 +158,7 @@ function getDaysOverdue(loan: Loan, currentDate: Date = new Date()): number {
 }
 
 /**
- * Formats a date as yyyy-MM-dd string
+ * Formats a date as MMMM d, yyyy string
  */
 function formatDateString(date: Date): string {
   const year = date.getFullYear();
