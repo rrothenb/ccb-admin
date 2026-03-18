@@ -57,9 +57,9 @@ class MediaService extends BaseEntityService<Media> {
     const lowerQuery = query.toLowerCase();
     const matches = result.data.filter(
       (m) =>
-        m.title.toLowerCase().includes(lowerQuery) ||
+        `${m.title}`.toLowerCase().includes(lowerQuery) ||
         m.author.toLowerCase().includes(lowerQuery) ||
-        m.isbn.toLowerCase().includes(lowerQuery)
+        `${m.isbn}`.toLowerCase().includes(lowerQuery)
     );
 
     return { success: true, data: matches };

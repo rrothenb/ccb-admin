@@ -607,15 +607,15 @@ function loadMedia() {
       '<form id="checkout-form" onsubmit="submitCheckout(event)">' +
         '<div class="form-group">' +
         '<label for="c-borrower">Borrower *</label>' +
-        '<select id="c-borrower" required>' +
-        '<option value="">Loading...</option>' +
-        '</select>' +
+        '<input type="text" id="c-borrower-search" placeholder="Type 2+ characters to search by name or email..." autocomplete="off">' +
+        '<div id="c-borrower-results" class="autocomplete-results"></div>' +
+        '<input type="hidden" id="c-borrower" required>' +
         '</div>' +
         '<div class="form-group">' +
         '<label for="c-media">Media Item *</label>' +
-        '<select id="c-media" required>' +
-        '<option value="">Loading...</option>' +
-        '</select>' +
+        '<input type="text" id="c-media-search" placeholder="Type 2+ characters to search by title, author, or ISBN..." autocomplete="off">' +
+        '<div id="c-media-results" class="autocomplete-results"></div>' +
+        '<input type="hidden" id="c-media" required>' +
         '</div>' +
         '<div class="form-group">' +
         '<label for="c-days">Loan Period (days)</label>' +
@@ -625,36 +625,114 @@ function loadMedia() {
         '</form>'
     );
 
-    // Load borrowers for dropdown
-    google.script.run
-      .withSuccessHandler(function (borrowers) {
-        var select = document.getElementById('c-borrower');
-        select.innerHTML =
-          '<option value="">Select a borrower...</option>' +
-          borrowers
-            .filter(function (b) {
-              return b.status === 'active';
-            })
-            .map(function (b) {
-              return '<option value="' + b.id + '">' + escapeHtml(b.name) + ' (' + escapeHtml(b.email) + ')</option>';
-            })
-            .join('');
-      })
-      .getActiveBorrowers();
+    // Set up typeahead search for borrower
+    setupBorrowerAutocomplete();
 
-    // Load available media for dropdown
-    google.script.run
-      .withSuccessHandler(function (media) {
-        var select = document.getElementById('c-media');
-        select.innerHTML =
-          '<option value="">Select a media item...</option>' +
-          media
-            .map(function (m) {
-              return '<option value="' + m.id + '">' + escapeHtml(m.title) + ' by ' + escapeHtml(m.author || 'Unknown') + '</option>';
-            })
-            .join('');
-      })
-      .getAvailableMedia();
+    // Set up typeahead search for media
+    setupMediaAutocomplete();
+  }
+
+  var borrowerSearchTimeout = null;
+
+  function setupBorrowerAutocomplete() {
+    var input = document.getElementById('c-borrower-search');
+    input.addEventListener('input', function () {
+      var query = input.value.trim();
+      document.getElementById('c-borrower').value = '';
+
+      clearTimeout(borrowerSearchTimeout);
+      if (query.length < 2) {
+        document.getElementById('c-borrower-results').innerHTML = '';
+        return;
+      }
+
+      borrowerSearchTimeout = setTimeout(function () {
+        document.getElementById('c-borrower-results').innerHTML =
+          '<div class="autocomplete-item loading">Searching...</div>';
+
+        google.script.run
+          .withSuccessHandler(function (results) {
+            var container = document.getElementById('c-borrower-results');
+            if (!results || results.length === 0) {
+              container.innerHTML = '<div class="autocomplete-item">No matches found</div>';
+              return;
+            }
+            var active = results.filter(function (b) { return b.status === 'active'; });
+            if (active.length === 0) {
+              container.innerHTML = '<div class="autocomplete-item">No active borrowers match</div>';
+              return;
+            }
+            container.innerHTML = active.slice(0, 20).map(function (b) {
+              return '<div class="autocomplete-item" onclick="selectBorrower(\'' +
+                escapeAttr(b.id) + '\', \'' +
+                escapeAttr(b.name) + '\', \'' +
+                escapeAttr(b.email) + '\')">' +
+                escapeHtml(b.name) + ' <span class="author">(' +
+                escapeHtml(b.email) + ')</span></div>';
+            }).join('');
+          })
+          .withFailureHandler(function () {
+            document.getElementById('c-borrower-results').innerHTML =
+              '<div class="autocomplete-item">Search failed — try again</div>';
+          })
+          .searchBorrowers(query);
+      }, 300);
+    });
+  }
+
+  function selectBorrower(id, name, email) {
+    document.getElementById('c-borrower').value = id;
+    document.getElementById('c-borrower-search').value = name + ' (' + email + ')';
+    document.getElementById('c-borrower-results').innerHTML = '';
+  }
+
+  var mediaSearchTimeout = null;
+
+  function setupMediaAutocomplete() {
+    var input = document.getElementById('c-media-search');
+    input.addEventListener('input', function () {
+      var query = input.value.trim();
+      document.getElementById('c-media').value = '';
+
+      clearTimeout(mediaSearchTimeout);
+      if (query.length < 2) {
+        document.getElementById('c-media-results').innerHTML = '';
+        return;
+      }
+
+      mediaSearchTimeout = setTimeout(function () {
+        document.getElementById('c-media-results').innerHTML =
+          '<div class="autocomplete-item loading">Searching...</div>';
+
+        google.script.run
+          .withSuccessHandler(function (results) {
+            var container = document.getElementById('c-media-results');
+            if (!results || results.length === 0) {
+              container.innerHTML = '<div class="autocomplete-item">No matches found</div>';
+              return;
+            }
+            container.innerHTML = results.slice(0, 20).map(function (m) {
+              return '<div class="autocomplete-item" onclick="selectMedia(\'' +
+                escapeAttr(m.id) + '\', \'' +
+                escapeAttr(m.title) + '\', \'' +
+                escapeAttr(m.author || 'Unknown') + '\')">' +
+                escapeHtml(m.title) + ' <span class="author">by ' +
+                escapeHtml(m.author || 'Unknown') + '</span></div>';
+            }).join('');
+          })
+          .withFailureHandler(function () {
+            document.getElementById('c-media-results').innerHTML =
+              '<div class="autocomplete-item">Search failed — try again</div>';
+          })
+          .searchMedia(query);
+      }, 300);
+    });
+  }
+
+  function selectMedia(id, title, author) {
+    document.getElementById('c-media').value = id;
+    document.getElementById('c-media-search').value = title + ' by ' + author;
+    document.getElementById('c-media-results').innerHTML = '';
   }
 
   function submitCheckout(event) {
