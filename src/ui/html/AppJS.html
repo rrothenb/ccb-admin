@@ -204,8 +204,8 @@ function loadMedia() {
     }
 
     tbody.innerHTML = loans
+      .sort((a, b) => new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime())
       .map(function (l) {
-        var isOverdue = l.status === 'overdue';
         return (
           '<tr data-id="' + l.id + '">' +
           '<td>' + escapeHtml(l.borrowerName) + '</td>' +

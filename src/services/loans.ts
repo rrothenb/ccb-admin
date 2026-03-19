@@ -58,7 +58,7 @@ class LoanService extends BaseEntityService<Loan> {
     // Create the loan
     const loanResult = this.create({
       borrowerId,
-      barcode,
+      id,
       checkoutDate: checkout,
       dueDate: dueDateStr,
       status: 'active' as LoanStatus,
@@ -129,7 +129,7 @@ class LoanService extends BaseEntityService<Loan> {
 
     const loan = loanResult.data;
 
-    if (!['out', 'overdue'].includes(loan.status)) {
+    if (!['active', 'overdue'].includes(loan.status)) {
       return { success: false, error: 'Can only extend active loans' };
     }
 

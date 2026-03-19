@@ -83,7 +83,7 @@ clasp push   # deploy changes
 ### MVP (Implemented)
 - **Borrowers** - Library members (id, name, email, phone, status, joinDate, notes)
 - **Media** - Books, DVDs, etc. (id, title, author, type, isbn, status, notes)
-- **Loans** - Checkout records (id, borrowerId, barcode, checkout, due, returnDate, status)
+- **Loans** - Checkout records (id, borrowerId, checkout, due, returnDate, status)
 
 ### Future
 - Classes

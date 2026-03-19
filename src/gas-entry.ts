@@ -252,7 +252,7 @@ function getAllMedia(): string {
   const loanService = getLoanService();
   const loanResult = loanService.getAll();
   const loans = loanResult.success && loanResult.data ? loanResult.data : [];
-  const loanedBarcodes = loans.map(loan => loan.barcode);
+  const loanedBarcodes = loans.map(loan => loan.id);
   console.log(loanedBarcodes.slice(0,5))
   console.log(results.slice(0,5))
   for (const resource of results) {
