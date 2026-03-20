@@ -25,9 +25,13 @@ class LoanService extends BaseEntityService<Loan> {
   checkout(
     borrowerId: string,
     barcode: string,
+    resourceId: string,
+    borrowerName: string,
+    title: string,
     loanDays: number = DEFAULT_LOAN_DAYS
   ): OperationResult<Loan> {
     // Validate borrower
+    console.log({borrowerId, barcode, loanDays, resourceId, borrowerName, title})
     const borrowerService = getBorrowerService();
     const borrowerCheck = borrowerService.isInGoodStanding(borrowerId);
     if (!borrowerCheck.success) {
@@ -39,7 +43,7 @@ class LoanService extends BaseEntityService<Loan> {
 
     // Validate media
     const mediaService = getMediaService();
-    const mediaCheck = mediaService.isAvailable(barcode);
+    const mediaCheck = mediaService.isAvailable(resourceId);
     if (!mediaCheck.success) {
       return { success: false, error: mediaCheck.error };
     }
@@ -58,7 +62,9 @@ class LoanService extends BaseEntityService<Loan> {
     // Create the loan
     const loanResult = this.create({
       borrowerId,
-      id,
+      title,
+      borrowerName,
+      barcode,
       checkoutDate: checkout,
       dueDate: dueDateStr,
       status: 'active' as LoanStatus,
@@ -69,7 +75,7 @@ class LoanService extends BaseEntityService<Loan> {
     }
 
     // Update media status
-    const mediaUpdate = mediaService.markAsOnLoan(barcode);
+    const mediaUpdate = mediaService.markAsOnLoan(resourceId);
     if (!mediaUpdate.success) {
       // Rollback loan creation
       if (loanResult.data) {
@@ -139,7 +145,7 @@ class LoanService extends BaseEntityService<Loan> {
     // TODO standardize date format
     const newDueDate = Utilities.formatDate(currentDue, Session.getScriptTimeZone(), 'MMMM d, yyyy');
 
-    return this.update(loanId, { dueDate: newDueDate });
+    return this.update(loanId, { dueDate: newDueDate, status: currentDue < new Date() ? 'overdue' : 'active' });
   }
 
   /**

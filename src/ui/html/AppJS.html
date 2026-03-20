@@ -610,12 +610,15 @@ function loadMedia() {
         '<input type="text" id="c-borrower-search" placeholder="Type 2+ characters to search by name or email..." autocomplete="off">' +
         '<div id="c-borrower-results" class="autocomplete-results"></div>' +
         '<input type="hidden" id="c-borrower" required>' +
+        '<input type="hidden" id="c-borrower-name" required>' +
         '</div>' +
         '<div class="form-group">' +
         '<label for="c-media">Media Item *</label>' +
         '<input type="text" id="c-media-search" placeholder="Type 2+ characters to search by title, author, or ISBN..." autocomplete="off">' +
         '<div id="c-media-results" class="autocomplete-results"></div>' +
         '<input type="hidden" id="c-media" required>' +
+        '<input type="hidden" id="c-media-name" required>' +
+        '<input type="hidden" id="c-media-barcode" required>' +
         '</div>' +
         '<div class="form-group">' +
         '<label for="c-days">Loan Period (days)</label>' +
@@ -682,6 +685,7 @@ function loadMedia() {
 
   function selectBorrower(id, name, email) {
     document.getElementById('c-borrower').value = id;
+    document.getElementById('c-borrower-name').value = name;
     document.getElementById('c-borrower-search').value = name + ' (' + email + ')';
     document.getElementById('c-borrower-results').innerHTML = '';
   }
@@ -706,6 +710,7 @@ function loadMedia() {
 
         google.script.run
           .withSuccessHandler(function (results) {
+            console.log(results.slice(0, 5))
             var container = document.getElementById('c-media-results');
             if (!results || results.length === 0) {
               container.innerHTML = '<div class="autocomplete-item">No matches found</div>';
@@ -714,10 +719,9 @@ function loadMedia() {
             container.innerHTML = results.slice(0, 20).map(function (m) {
               return '<div class="autocomplete-item" onclick="selectMedia(\'' +
                 escapeAttr(m.id) + '\', \'' +
-                escapeAttr(m.title) + '\', \'' +
-                escapeAttr(m.author || 'Unknown') + '\')">' +
-                escapeHtml(m.title) + ' <span class="author">by ' +
-                escapeHtml(m.author || 'Unknown') + '</span></div>';
+                escapeAttr(m.barcode) + '\', \'' +
+                escapeAttr(m.title) + '\')">' +
+                escapeAttr(m.barcode) + ' | ' + escapeHtml(m.title) + '</div>';
             }).join('');
           })
           .withFailureHandler(function () {
@@ -729,9 +733,11 @@ function loadMedia() {
     });
   }
 
-  function selectMedia(id, title, author) {
+  function selectMedia(id, barcode, title) {
     document.getElementById('c-media').value = id;
-    document.getElementById('c-media-search').value = title + ' by ' + author;
+    document.getElementById('c-media-name').value = title;
+    document.getElementById('c-media-barcode').value = barcode;
+    document.getElementById('c-media-search').value = `${barcode} | ${title}`;
     document.getElementById('c-media-results').innerHTML = '';
   }
 
@@ -740,8 +746,11 @@ function loadMedia() {
     showStatus('Processing checkout...', 'loading');
 
     var borrowerId = document.getElementById('c-borrower').value;
-    var barcode = document.getElementById('c-media').value;
+    var borrowerName = document.getElementById('c-borrower-name').value;
+    var barcode = document.getElementById('c-media-barcode').value;
+    var title = document.getElementById('c-media-name').value;
     var days = parseInt(document.getElementById('c-days').value) || 14;
+    var resourceId = document.getElementById('c-media').value;
 
     google.script.run
       .withSuccessHandler(function (result) {
@@ -755,7 +764,7 @@ function loadMedia() {
         }
       })
       .withFailureHandler(handleError)
-      .processCheckout(borrowerId, barcode, days);
+      .processCheckout(borrowerId, barcode, resourceId, title, borrowerName, days);
   }
 
   function returnLoan(id) {

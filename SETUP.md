@@ -219,7 +219,7 @@ initializeAllHeaders()
 This adds the header row to each master spreadsheet:
 - **Borrowers:** id, name, email, phone, status, joinDate, notes
 - **Media:** id, title, author, type, isbn, status, notes
-- **Loans:** id, borrowerId, checkout, due, returnDate, status
+- **Loans:** id, borrowerId, barcode, checkout, due, returnDate, status
 
 You can also manually add these headers if you prefer.
 

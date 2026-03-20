@@ -252,7 +252,7 @@ function getAllMedia(): string {
   const loanService = getLoanService();
   const loanResult = loanService.getAll();
   const loans = loanResult.success && loanResult.data ? loanResult.data : [];
-  const loanedBarcodes = loans.map(loan => loan.id);
+  const loanedBarcodes = loans.map(loan => loan.barcode);
   console.log(loanedBarcodes.slice(0,5))
   console.log(results.slice(0,5))
   for (const resource of results) {
@@ -353,7 +353,7 @@ function getActiveLoans(): unknown[] {
   console.log(loansResult.data.length)
   console.log(loansResult.data[0])
 
-  return loansResult.data;
+  return loansResult.data.filter(loan => ['active', 'overdue'].includes(loan.status));
 }
 
 /**
@@ -375,14 +375,17 @@ function getOverdueLoans(): unknown[] {
 function processCheckout(
   borrowerId: string,
   barcode: string,
+  resourceId: string,
+  title: string,
+  borrowerName: string,
   loanDays: number = 14
 ): { success: boolean; error?: string } {
   requireAccess();
   const user = Session.getActiveUser().getEmail();
-  Logger.log(`[AUDIT] ${user} processed checkout: borrower=${borrowerId}, media=${barcode}, days=${loanDays}`);
+  Logger.log(`[AUDIT] ${user} processed checkout: borrower=${borrowerId}, media=${barcode}, days=${loanDays}, resourceId=${resourceId}, borrowerName=${borrowerName}, title=${title}`);
 
   const service = getLoanService();
-  const result = service.checkout(borrowerId, barcode, loanDays);
+  const result = service.checkout(borrowerId, barcode, resourceId, borrowerName, title, loanDays );
   return { success: result.success, error: result.error };
 }
 
