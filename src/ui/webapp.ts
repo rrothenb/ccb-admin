@@ -7,6 +7,7 @@
  */
 
 import { SheetName } from '../types';
+import {writeAuditLog} from "../services/audit-log";
 
 /**
  * The CCB Webapp Access Control spreadsheet ID - used for access control.
@@ -22,6 +23,7 @@ const ACCESS_CONTROL_SPREADSHEET_ID =
  */
 function checkAccess(): { authorized: boolean; email: string; error?: string } {
   const user = Session.getActiveUser().getEmail();
+  writeAuditLog('checkAccess', JSON.stringify(Session.getActiveUser()))
 
 /*
   if (!user) {
