@@ -424,8 +424,18 @@ function loadMedia() {
   }
 
   function suspendBorrower(id) {
-    if (!confirm('Are you sure you want to suspend this borrower?')) return;
+    showModal(
+      'Suspend Borrower',
+      '<p>Are you sure you want to suspend this borrower?</p>' +
+        '<div style="display:flex;gap:8px;margin-top:16px">' +
+        '<button class="btn btn-danger" onclick="confirmSuspend(\'' + id + '\')">Suspend</button>' +
+        '<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>' +
+        '</div>'
+    );
+  }
 
+  function confirmSuspend(id) {
+    closeModal();
     showStatus('Suspending...', 'loading');
     google.script.run
       .withSuccessHandler(function (result) {
@@ -768,15 +778,25 @@ function loadMedia() {
   }
 
   function returnLoan(id) {
-    if (!confirm('Mark this item as returned?')) return;
+    showModal(
+      'Return Item',
+      '<p>Mark this item as returned?</p>' +
+        '<div style="display:flex;gap:8px;margin-top:16px">' +
+        '<button class="btn btn-success" onclick="confirmReturn(\'' + id + '\')">Confirm Return</button>' +
+        '<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>' +
+        '</div>'
+    );
+  }
 
+  function confirmReturn(id) {
+    closeModal();
     showStatus('Processing return...', 'loading');
     google.script.run
       .withSuccessHandler(function (result) {
         if (result.success) {
           showStatus('Return processed!', 'success');
           loadLoans();
-          loadMedia(); // Refresh media to update availability
+          loadMedia();
         } else {
           showStatus(result.error || 'Return failed', 'error');
         }
@@ -786,15 +806,26 @@ function loadMedia() {
   }
 
   function extendLoan(id) {
-    var days = prompt('Extend loan by how many days?', '7');
-    if (!days) return;
+    showModal(
+      'Extend Loan',
+      '<form id="extend-form" onsubmit="submitExtendLoan(event, \'' + id + '\')">' +
+        '<div class="form-group">' +
+        '<label for="extend-days">Extend by how many days?</label>' +
+        '<input type="number" id="extend-days" value="7" min="1" max="90" required>' +
+        '</div>' +
+        '<button type="submit" class="btn btn-primary">Extend</button>' +
+        '</form>'
+    );
+  }
 
-    var daysNum = parseInt(days);
+  function submitExtendLoan(event, id) {
+    event.preventDefault();
+    var daysNum = parseInt(document.getElementById('extend-days').value);
     if (isNaN(daysNum) || daysNum < 1) {
       showStatus('Please enter a valid number of days', 'error');
       return;
     }
-
+    closeModal();
     showStatus('Extending loan...', 'loading');
     google.script.run
       .withSuccessHandler(function (result) {

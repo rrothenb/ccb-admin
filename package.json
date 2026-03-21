@@ -10,7 +10,7 @@
     "test:coverage": "jest --coverage",
     "lint": "eslint src/**/*.ts",
     "push": "npm run build && clasp push",
-    "deploy": "npm run build && clasp push && clasp deploy",
+    "deploy": "npm run build && clasp push --force && clasp deploy --deploymentId AKfycbxlopiT2jl_hGrmUOAUgzLrYvnjzBi6AkdXZWy1qSebzp8bjF_i8P0VRzbLspjpbZCARg",
     "open": "clasp open",
     "logs": "clasp logs"
   },
