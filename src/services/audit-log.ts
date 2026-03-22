@@ -25,6 +25,14 @@ function getAuditLogSheet(): GoogleAppsScript.Spreadsheet.Sheet | null {
     }
     return sheet;
   } catch (e) {
+    const msg = String(e).toLowerCase();
+    if (msg.includes('permission') || msg.includes('not found')) {
+      const email = Session.getActiveUser().getEmail();
+      throw new Error(
+        `Access denied to the Audit Log spreadsheet. ` +
+        `Please ask your administrator to share it with: ${email}`
+      );
+    }
     Logger.log(`Could not open audit log spreadsheet: ${e}`);
     return null;
   }
@@ -36,7 +44,14 @@ function writeAuditLog(user: string, action: string): void {
   const sheet = getAuditLogSheet();
   if (!sheet) return;
 
-  sheet.appendRow([new Date(), user, action]);
+  try {
+    sheet.appendRow([new Date(), user, action]);
+  } catch (e) {
+    throw new Error(
+      `Access denied to the Audit Log spreadsheet (read-only). ` +
+      `Please ask your administrator to share it with edit access for: ${user}`
+    );
+  }
 }
 
 function setAuditLogSpreadsheetId(): void {

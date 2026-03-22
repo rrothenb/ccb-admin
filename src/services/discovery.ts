@@ -175,6 +175,14 @@ function openMasterSpreadsheet(sheetName: SheetName): GoogleAppsScript.Spreadshe
   try {
     return SpreadsheetApp.openById(spreadsheetId);
   } catch (e) {
+    const msg = String(e).toLowerCase();
+    if (msg.includes('permission') || msg.includes('not found')) {
+      const email = Session.getActiveUser().getEmail();
+      throw new Error(
+        `Access denied to the ${sheetName} spreadsheet. ` +
+        `Please ask your administrator to share it with: ${email}`
+      );
+    }
     Logger.log(`Error opening spreadsheet for ${sheetName}: ${e}`);
     return null;
   }

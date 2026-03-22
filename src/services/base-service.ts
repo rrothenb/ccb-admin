@@ -114,7 +114,14 @@ class BaseEntityService<T extends Entity> {
 
     // Append the row
     const row = this.entityToRow(fullEntity);
-    sheet.appendRow(row);
+    try {
+      sheet.appendRow(row);
+    } catch (e) {
+      throw new Error(
+        `Access denied to the ${this.sheetName} spreadsheet (read-only). ` +
+        `Please ask your administrator to share it with edit access for: ${Session.getActiveUser().getEmail()}`
+      );
+    }
 
     return { success: true, data: fullEntity };
   }
@@ -147,7 +154,14 @@ class BaseEntityService<T extends Entity> {
 
         // Update the row (i+1 because sheet rows are 1-indexed)
         const range = sheet.getRange(i + 1, 1, 1, row.length);
-        range.setValues([row]);
+        try {
+          range.setValues([row]);
+        } catch (e) {
+          throw new Error(
+            `Access denied to the ${this.sheetName} spreadsheet (read-only). ` +
+            `Please ask your administrator to share it with edit access for: ${Session.getActiveUser().getEmail()}`
+          );
+        }
 
         return { success: true, data: updatedEntity };
       }
@@ -174,7 +188,14 @@ class BaseEntityService<T extends Entity> {
     for (let i = 1; i < data.length; i++) {
       if (data[i][0] == id) {
         // Delete the row (i+1 because sheet rows are 1-indexed)
-        sheet.deleteRow(i + 1);
+        try {
+          sheet.deleteRow(i + 1);
+        } catch (e) {
+          throw new Error(
+            `Access denied to the ${this.sheetName} spreadsheet (read-only). ` +
+            `Please ask your administrator to share it with edit access for: ${Session.getActiveUser().getEmail()}`
+          );
+        }
         return { success: true };
       }
     }

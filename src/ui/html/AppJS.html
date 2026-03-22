@@ -870,8 +870,18 @@ function loadMedia() {
   }
 
   function handleError(error) {
-    console.log('in handleError...')
-    showStatus(error.message || 'An error occurred', 'error');
     console.error(error);
+    var msg = error.message || 'An error occurred';
+    if (msg.indexOf('Access denied') !== -1) {
+      showModal(
+        'Access Denied',
+        '<p>' + escapeHtml(msg) + '</p>' +
+        '<p style="margin-top:12px;color:#6b7280;font-size:13px">' +
+        'Contact your library administrator to have the spreadsheet shared with your account.' +
+        '</p>'
+      );
+    } else {
+      showStatus(msg, 'error');
+    }
   }
 </script>
