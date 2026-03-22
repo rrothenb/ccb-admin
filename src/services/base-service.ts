@@ -18,10 +18,12 @@ interface Entity {
 class BaseEntityService<T extends Entity> {
   protected sheetName: SheetName;
   protected columns: (keyof T)[];
+  protected idPrefix: string;
 
-  constructor(sheetName: SheetName, columns: (keyof T)[]) {
+  constructor(sheetName: SheetName, columns: (keyof T)[], idPrefix: string = '') {
     this.sheetName = sheetName;
     this.columns = columns;
+    this.idPrefix = idPrefix;
   }
 
   /**
@@ -239,7 +241,13 @@ class BaseEntityService<T extends Entity> {
    * Generates a unique ID for a new entity
    */
   protected generateId(): string {
-    return Utilities.getUuid();
+    if (!this.idPrefix) {
+      return Utilities.getUuid();
+    }
+    const d1 = Array.from({length: 5}, () => Math.floor(Math.random() * 10)).join('');
+    const letter = String.fromCharCode(65 + Math.floor(Math.random() * 26));
+    const d2 = Array.from({length: 4}, () => Math.floor(Math.random() * 10)).join('');
+    return `${this.idPrefix}${d1}${letter}${d2}`;
   }
 
   /**

@@ -141,9 +141,8 @@ function loadMedia() {
 
   function renderBorrowers(borrowers) {
     var tbody = document.getElementById('borrowers-tbody');
-    console.log({borrowers})
     if (!borrowers || borrowers.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No borrowers found</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No borrowers found</td></tr>';
       return;
     }
 
@@ -154,12 +153,8 @@ function loadMedia() {
           '<td>' + escapeHtml(b.name) + '</td>' +
           '<td>' + escapeHtml(b.email) + '</td>' +
           '<td>' + escapeHtml(b.phone || '') + '</td>' +
-          '<td><span class="status-badge status-' + b.status + '">' + b.status + '</span></td>' +
           '<td class="actions-cell">' +
           '<button class="btn btn-secondary" onclick="editBorrower(\'' + b.id + '\')">Edit</button>' +
-          (b.status === 'active'
-            ? '<button class="btn btn-danger" onclick="suspendBorrower(\'' + b.id + '\')">Suspend</button>'
-            : '<button class="btn btn-secondary" onclick="activateBorrower(\'' + b.id + '\')">Activate</button>') +
           '</td>' +
           '</tr>'
         );
@@ -259,10 +254,15 @@ function loadMedia() {
     }
 
     var filtered = allMedia.filter(function (m) {
-      console.log(m.title)
       return (
         (m.title && `${m.title}`.toLowerCase().indexOf(query) !== -1) ||
-        (m.author && m.author.toLowerCase().indexOf(query) !== -1)
+        (m.author && `${m.author}`.toLowerCase().indexOf(query) !== -1) ||
+        (m.place && `${m.place}`.toLowerCase().indexOf(query) !== -1) ||
+        (m.abstract && `${m.abstract}`.toLowerCase().indexOf(query) !== -1) ||
+        (m.notes && `${m.notes}`.toLowerCase().indexOf(query) !== -1) ||
+        (m.subjects && `${m.subjects}`.toLowerCase().indexOf(query) !== -1) ||
+        (m.description && `${m.description}`.toLowerCase().indexOf(query) !== -1) ||
+        (m.barcodes && `${m.barcodes}`.toLowerCase().indexOf(query) !== -1)
       );
     });
     renderMedia(filtered);
@@ -321,22 +321,15 @@ function loadMedia() {
     showModal(
       'Add Borrower',
       '<form id="borrower-form" onsubmit="submitBorrower(event)">' +
-        '<div class="form-group">' +
-        '<label for="b-name">Name *</label>' +
-        '<input type="text" id="b-name" required>' +
-        '</div>' +
-        '<div class="form-group">' +
-        '<label for="b-email">Email *</label>' +
-        '<input type="email" id="b-email" required>' +
-        '</div>' +
-        '<div class="form-group">' +
-        '<label for="b-phone">Phone</label>' +
-        '<input type="text" id="b-phone">' +
-        '</div>' +
-        '<div class="form-group">' +
-        '<label for="b-notes">Notes</label>' +
-        '<textarea id="b-notes" rows="3"></textarea>' +
-        '</div>' +
+        '<div class="form-group"><label for="b-name">Name *</label><input type="text" id="b-name" required></div>' +
+        '<div class="form-group"><label for="b-email">Email *</label><input type="email" id="b-email" required></div>' +
+        '<div class="form-group"><label for="b-phone">Phone</label><input type="text" id="b-phone"></div>' +
+        '<div class="form-group"><label for="b-gender">Gender</label><input type="text" id="b-gender"></div>' +
+        '<div class="form-group"><label for="b-address">Address</label><input type="text" id="b-address"></div>' +
+        '<div class="form-group"><label for="b-postcode">Postcode</label><input type="text" id="b-postcode"></div>' +
+        '<div class="form-group"><label for="b-borrowerType">Borrower Type</label><input type="text" id="b-borrowerType"></div>' +
+        '<div class="form-group"><label for="b-expiryDate">Expiry Date</label><input type="text" id="b-expiryDate"></div>' +
+        '<div class="form-group"><label for="b-memberSince">Member Since</label><input type="text" id="b-memberSince"></div>' +
         '<input type="hidden" id="b-id" value="">' +
         '<button type="submit" class="btn btn-primary">Save Borrower</button>' +
         '</form>'
@@ -406,7 +399,12 @@ function loadMedia() {
       name: document.getElementById('b-name').value,
       email: document.getElementById('b-email').value,
       phone: document.getElementById('b-phone').value,
-      notes: document.getElementById('b-notes').value,
+      gender: document.getElementById('b-gender').value,
+      address: document.getElementById('b-address').value,
+      postcode: document.getElementById('b-postcode').value,
+      borrowerType: document.getElementById('b-borrowerType').value,
+      expiryDate: document.getElementById('b-expiryDate').value,
+      memberSince: document.getElementById('b-memberSince').value,
     };
 
     google.script.run
@@ -423,47 +421,6 @@ function loadMedia() {
       .saveBorrower(data);
   }
 
-  function suspendBorrower(id) {
-    showModal(
-      'Suspend Borrower',
-      '<p>Are you sure you want to suspend this borrower?</p>' +
-        '<div style="display:flex;gap:8px;margin-top:16px">' +
-        '<button class="btn btn-danger" onclick="confirmSuspend(\'' + id + '\')">Suspend</button>' +
-        '<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>' +
-        '</div>'
-    );
-  }
-
-  function confirmSuspend(id) {
-    closeModal();
-    showStatus('Suspending...', 'loading');
-    google.script.run
-      .withSuccessHandler(function (result) {
-        if (result.success) {
-          showStatus('Borrower suspended', 'success');
-          loadBorrowers();
-        } else {
-          showStatus(result.error || 'Failed to suspend', 'error');
-        }
-      })
-      .withFailureHandler(handleError)
-      .suspendBorrowerById(id);
-  }
-
-  function activateBorrower(id) {
-    showStatus('Activating...', 'loading');
-    google.script.run
-      .withSuccessHandler(function (result) {
-        if (result.success) {
-          showStatus('Borrower activated', 'success');
-          loadBorrowers();
-        } else {
-          showStatus(result.error || 'Failed to activate', 'error');
-        }
-      })
-      .withFailureHandler(handleError)
-      .activateBorrowerById(id);
-  }
 
   // ============================================================================
   // MEDIA ACTIONS
@@ -473,32 +430,20 @@ function loadMedia() {
     showModal(
       'Add Media',
       '<form id="media-form" onsubmit="submitMedia(event)">' +
-        '<div class="form-group">' +
-        '<label for="m-title">Title *</label>' +
-        '<input type="text" id="m-title" required>' +
-        '</div>' +
-        '<div class="form-group">' +
-        '<label for="m-author">Author</label>' +
-        '<input type="text" id="m-author">' +
-        '</div>' +
-        '<div class="form-group">' +
-        '<label for="m-type">Type *</label>' +
-        '<select id="m-type" required>' +
-        '<option value="book">Book</option>' +
-        '<option value="dvd">DVD</option>' +
-        '<option value="magazine">Magazine</option>' +
-        '<option value="audiobook">Audiobook</option>' +
-        '<option value="other">Other</option>' +
-        '</select>' +
-        '</div>' +
-        '<div class="form-group">' +
-        '<label for="m-isbn">ISBN</label>' +
-        '<input type="text" id="m-isbn">' +
-        '</div>' +
-        '<div class="form-group">' +
-        '<label for="m-notes">Notes</label>' +
-        '<textarea id="m-notes" rows="3"></textarea>' +
-        '</div>' +
+        '<div class="form-group"><label for="m-title">Title *</label><input type="text" id="m-title" required></div>' +
+        '<div class="form-group"><label for="m-author">Author</label><input type="text" id="m-author"></div>' +
+        '<div class="form-group"><label for="m-type">Type</label><input type="text" id="m-type"></div>' +
+        '<div class="form-group"><label for="m-isbn">ISBN</label><input type="text" id="m-isbn"></div>' +
+        '<div class="form-group"><label for="m-notes">Notes</label><textarea id="m-notes" rows="3"></textarea></div>' +
+        '<div class="form-group"><label for="m-genres">Genres</label><input type="text" id="m-genres"></div>' +
+        '<div class="form-group"><label for="m-date">Date</label><input type="text" id="m-date"></div>' +
+        '<div class="form-group"><label for="m-abstract">Abstract</label><textarea id="m-abstract" rows="3"></textarea></div>' +
+        '<div class="form-group"><label for="m-subjects">Subjects</label><input type="text" id="m-subjects"></div>' +
+        '<div class="form-group"><label for="m-description">Description</label><input type="text" id="m-description"></div>' +
+        '<div class="form-group"><label for="m-publisher">Publisher</label><input type="text" id="m-publisher"></div>' +
+        '<div class="form-group"><label for="m-place">Place</label><input type="text" id="m-place"></div>' +
+        '<div class="form-group"><label for="m-classification">Classification</label><input type="text" id="m-classification"></div>' +
+        '<div class="form-group"><label for="m-barcodes">Barcodes</label><input type="text" id="m-barcodes"></div>' +
         '<input type="hidden" id="m-id" value="">' +
         '<button type="submit" class="btn btn-primary">Save Media</button>' +
         '</form>'
@@ -591,6 +536,15 @@ function loadMedia() {
       type: document.getElementById('m-type').value,
       isbn: document.getElementById('m-isbn').value,
       notes: document.getElementById('m-notes').value,
+      genres: document.getElementById('m-genres').value,
+      date: document.getElementById('m-date').value,
+      abstract: document.getElementById('m-abstract').value,
+      subjects: document.getElementById('m-subjects').value,
+      description: document.getElementById('m-description').value,
+      publisher: document.getElementById('m-publisher').value,
+      place: document.getElementById('m-place').value,
+      classification: document.getElementById('m-classification').value,
+      barcodes: document.getElementById('m-barcodes').value,
     };
 
     google.script.run
@@ -624,7 +578,7 @@ function loadMedia() {
         '</div>' +
         '<div class="form-group">' +
         '<label for="c-media">Media Item *</label>' +
-        '<input type="text" id="c-media-search" placeholder="Type 2+ characters to search by title, author, or ISBN..." autocomplete="off">' +
+        '<input type="text" id="c-media-search" placeholder="Type 2+ characters to search by title, author, barcode, or more..." autocomplete="off">' +
         '<div id="c-media-results" class="autocomplete-results"></div>' +
         '<input type="hidden" id="c-media" required>' +
         '<input type="hidden" id="c-media-name" required>' +
@@ -632,7 +586,7 @@ function loadMedia() {
         '</div>' +
         '<div class="form-group">' +
         '<label for="c-days">Loan Period (days)</label>' +
-        '<input type="number" id="c-days" value="14" min="1" max="90">' +
+        '<input type="number" id="c-days" value="21" min="1" max="90">' +
         '</div>' +
         '<button type="submit" class="btn btn-success">Checkout</button>' +
         '</form>'
@@ -670,12 +624,7 @@ function loadMedia() {
               container.innerHTML = '<div class="autocomplete-item">No matches found</div>';
               return;
             }
-            var active = results.filter(function (b) { return b.status === 'active'; });
-            if (active.length === 0) {
-              container.innerHTML = '<div class="autocomplete-item">No active borrowers match</div>';
-              return;
-            }
-            container.innerHTML = active.slice(0, 20).map(function (b) {
+            container.innerHTML = results.slice(0, 20).map(function (b) {
               return '<div class="autocomplete-item" onclick="selectBorrower(\'' +
                 escapeAttr(b.id) + '\', \'' +
                 escapeAttr(b.name) + '\', \'' +
@@ -811,7 +760,7 @@ function loadMedia() {
       '<form id="extend-form" onsubmit="submitExtendLoan(event, \'' + id + '\')">' +
         '<div class="form-group">' +
         '<label for="extend-days">Extend by how many days?</label>' +
-        '<input type="number" id="extend-days" value="7" min="1" max="90" required>' +
+        '<input type="number" id="extend-days" value="21" min="1" max="90" required>' +
         '</div>' +
         '<button type="submit" class="btn btn-primary">Extend</button>' +
         '</form>'

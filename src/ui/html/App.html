@@ -322,12 +322,11 @@
                 <th>Name</th>
                 <th>Email</th>
                 <th>Phone</th>
-                <th>Status</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody id="borrowers-tbody">
-              <tr><td colspan="5" class="loading">Loading...</td></tr>
+              <tr><td colspan="4" class="loading">Loading...</td></tr>
             </tbody>
           </table>
         </div>
@@ -340,7 +339,7 @@
           <button class="btn btn-secondary" onclick="refreshCurrentTab()">Refresh</button>
         </div>
         <div class="search-box">
-          <input type="text" id="media-search" placeholder="Search by title or author..."
+          <input type="text" id="media-search" placeholder="Search by title, author, place, abstract, notes, subjects, description, or barcode..."
                  onkeypress="if(event.key==='Enter') searchMediaUI()">
           <button class="btn btn-secondary" onclick="searchMediaUI()">Search</button>
           <button class="btn btn-secondary" onclick="clearMediaSearch()">Clear</button>

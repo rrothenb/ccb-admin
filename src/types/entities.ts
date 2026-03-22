@@ -2,18 +2,12 @@
  * Entity types for the library management system
  */
 
-/** Status of a borrower in the system */
-export type BorrowerStatus = 'active' | 'suspended' | 'inactive';
-
 /** A library borrower/member */
 export interface Borrower {
   id: string;
   name: string;
   email: string;
   phone: string;
-  status: BorrowerStatus;
-  joinDate: string; // ISO date string (MMMM d, yyyy)
-  notes: string;
   gender: string;
   address: string;
   postcode: string;
@@ -67,7 +61,7 @@ export type SheetName = 'Borrowers' | 'Media' | 'Loans';
 
 /** Column headers for each entity type */
 export const BORROWER_COLUMNS: (keyof Borrower)[] = [
-  'id', 'name', 'email', 'phone', 'gender', 'address', 'postcode', 'borrowerType', 'expiryDate', 'memberSince', 'status'
+  'id', 'name', 'email', 'phone', 'gender', 'address', 'postcode', 'borrowerType', 'expiryDate', 'memberSince'
 ];
 export const MEDIA_COLUMNS: (keyof Media)[] = [
   'id', 'title', 'author', 'type', 'isbn', 'notes', 'genres', 'date', 'abstract',	'subjects', 'description', 'publisher', 'place', 'classification', 'barcodes'

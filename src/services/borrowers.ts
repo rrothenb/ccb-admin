@@ -2,7 +2,7 @@
  * Borrowers service - CRUD operations for library borrowers/members
  */
 
-import { Borrower, BorrowerStatus, BORROWER_COLUMNS, OperationResult } from '../types';
+import { Borrower, BORROWER_COLUMNS, OperationResult } from '../types';
 import { BaseEntityService } from './base-service';
 
 /**
@@ -10,48 +10,46 @@ import { BaseEntityService } from './base-service';
  */
 class BorrowerService extends BaseEntityService<Borrower> {
   constructor() {
-    super('Borrowers', BORROWER_COLUMNS);
+    super('Borrowers', BORROWER_COLUMNS, 'B');
   }
 
   /**
-   * Creates a new borrower with default values
+   * Creates a new borrower
    */
   createBorrower(
     name: string,
     email: string,
     phone: string = '',
-    notes: string = ''
+    gender: string = '',
+    address: string = '',
+    postcode: string = '',
+    borrowerType: string = '',
+    expiryDate: string = '',
+    memberSince: string = ''
   ): OperationResult<Borrower> {
-    const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMMM d, yyyy');
-
-    return this.create({
-      name,
-      email,
-      phone,
-      status: 'active' as BorrowerStatus,
-      notes,
-    });
+    return this.create({ name, email, phone, gender, address, postcode, borrowerType, expiryDate, memberSince });
   }
 
   /**
-   * Gets all active borrowers
+   * Gets all borrowers currently in good standing (expiryDate after today)
    */
   getActiveBorrowers(): OperationResult<Borrower[]> {
     const result = this.getAll();
     if (!result.success || !result.data) {
-      console.log(`Boo!  I got ${result.error}!`)
       return result;
     }
 
-    const activeBorrowers = result.data.filter((b) => b.status === 'active');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const activeBorrowers = result.data.filter((b) => b.expiryDate && new Date(b.expiryDate) > today);
     return { success: true, data: activeBorrowers };
   }
 
   /**
-   * Searches borrowers by name or email
+   * Searches borrowers in good standing by name or email
    */
   searchBorrowers(query: string): OperationResult<Borrower[]> {
-    const result = this.getAll();
+    const result = this.getActiveBorrowers();
     if (!result.success || !result.data) {
       return result;
     }
@@ -67,27 +65,7 @@ class BorrowerService extends BaseEntityService<Borrower> {
   }
 
   /**
-   * Suspends a borrower
-   */
-  suspendBorrower(id: string, reason: string = ''): OperationResult<Borrower> {
-    const notes = reason ? `Suspended: ${reason}` : 'Suspended';
-    return this.update(id, {
-      status: 'suspended' as BorrowerStatus,
-      notes,
-    });
-  }
-
-  /**
-   * Reactivates a suspended borrower
-   */
-  reactivateBorrower(id: string): OperationResult<Borrower> {
-    return this.update(id, {
-      status: 'active' as BorrowerStatus,
-    });
-  }
-
-  /**
-   * Checks if a borrower is in good standing (active status)
+   * Checks if a borrower is in good standing (expiryDate after today)
    */
   isInGoodStanding(id: string): OperationResult<boolean> {
     const result = this.getById(id);
@@ -95,7 +73,9 @@ class BorrowerService extends BaseEntityService<Borrower> {
       return { success: false, error: result.error };
     }
 
-    return { success: true, data: result.data.status === 'active' };
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return { success: true, data: !!result.data.expiryDate && new Date(result.data.expiryDate) > today };
   }
 }
 

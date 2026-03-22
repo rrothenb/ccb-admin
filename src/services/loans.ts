@@ -8,14 +8,14 @@ import { getBorrowerService } from './borrowers';
 import { getMediaService } from './media';
 
 /** Default loan period in days */
-const DEFAULT_LOAN_DAYS = 14;
+const DEFAULT_LOAN_DAYS = 21;
 
 /**
  * Service for managing loans in the library system
  */
 class LoanService extends BaseEntityService<Loan> {
   constructor() {
-    super('Loans', LOAN_COLUMNS);
+    super('Loans', LOAN_COLUMNS, 'L');
   }
 
   /**

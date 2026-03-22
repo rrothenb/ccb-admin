@@ -156,20 +156,32 @@ function saveBorrower(borrowerData: {
   name: string;
   email: string;
   phone: string;
-  notes: string;
+  gender: string;
+  address: string;
+  postcode: string;
+  borrowerType: string;
+  expiryDate: string;
+  memberSince: string;
 }): { success: boolean; error?: string } {
   const user = Session.getActiveUser().getEmail();
 
   const service = getBorrowerService();
 
+  const fields = {
+    name: borrowerData.name,
+    email: borrowerData.email,
+    phone: borrowerData.phone,
+    gender: borrowerData.gender,
+    address: borrowerData.address,
+    postcode: borrowerData.postcode,
+    borrowerType: borrowerData.borrowerType,
+    expiryDate: borrowerData.expiryDate,
+    memberSince: borrowerData.memberSince,
+  };
+
   if (borrowerData.id) {
     writeAuditLog(user, `updated borrower: ${borrowerData.name} (ID: ${borrowerData.id})`);
-    const result = service.update(borrowerData.id, {
-      name: borrowerData.name,
-      email: borrowerData.email,
-      phone: borrowerData.phone,
-      notes: borrowerData.notes,
-    });
+    const result = service.update(borrowerData.id, fields);
     return { success: result.success, error: result.error };
   } else {
     writeAuditLog(user, `created borrower: ${borrowerData.name}`);
@@ -177,34 +189,15 @@ function saveBorrower(borrowerData: {
       borrowerData.name,
       borrowerData.email,
       borrowerData.phone,
-      borrowerData.notes
+      borrowerData.gender,
+      borrowerData.address,
+      borrowerData.postcode,
+      borrowerData.borrowerType,
+      borrowerData.expiryDate,
+      borrowerData.memberSince
     );
     return { success: result.success, error: result.error };
   }
-}
-
-/**
- * Suspends a borrower by ID
- */
-function suspendBorrowerById(id: string): { success: boolean; error?: string } {
-  const user = Session.getActiveUser().getEmail();
-  writeAuditLog(user, `suspended borrower: ${id}`);
-
-  const service = getBorrowerService();
-  const result = service.suspendBorrower(id);
-  return { success: result.success, error: result.error };
-}
-
-/**
- * Activates a borrower by ID
- */
-function activateBorrowerById(id: string): { success: boolean; error?: string } {
-  const user = Session.getActiveUser().getEmail();
-  writeAuditLog(user, `activated borrower: ${id}`);
-
-  const service = getBorrowerService();
-  const result = service.update(id, { status: 'active' });
-  return { success: result.success, error: result.error };
 }
 
 // ============================================================================
@@ -283,29 +276,49 @@ function saveMedia(mediaData: {
   type: string;
   isbn: string;
   notes: string;
+  genres: string;
+  date: string;
+  abstract: string;
+  subjects: string;
+  description: string;
+  publisher: string;
+  place: string;
+  classification: string;
+  barcodes: string;
 }): { success: boolean; error?: string } {
   const user = Session.getActiveUser().getEmail();
 
   const service = getMediaService();
 
+  const fields = {
+    title: mediaData.title,
+    author: mediaData.author,
+    type: mediaData.type,
+    isbn: mediaData.isbn,
+    notes: mediaData.notes,
+    genres: mediaData.genres,
+    date: mediaData.date,
+    abstract: mediaData.abstract,
+    subjects: mediaData.subjects,
+    description: mediaData.description,
+    publisher: mediaData.publisher,
+    place: mediaData.place,
+    classification: mediaData.classification,
+    barcodes: mediaData.barcodes,
+  };
+
   if (mediaData.id) {
     writeAuditLog(user, `updated media: ${mediaData.title} (ID: ${mediaData.id})`);
-    const result = service.update(mediaData.id, {
-      title: mediaData.title,
-      author: mediaData.author,
-      type: mediaData.type as 'book' | 'dvd' | 'magazine' | 'audiobook' | 'other',
-      isbn: mediaData.isbn,
-      notes: mediaData.notes,
-    });
+    const result = service.update(mediaData.id, fields);
     return { success: result.success, error: result.error };
   } else {
     writeAuditLog(user, `created media: ${mediaData.title}`);
     const result = service.createMedia(
-      mediaData.title,
-      mediaData.author,
-      mediaData.type as 'book' | 'dvd' | 'magazine' | 'audiobook' | 'other',
-      mediaData.isbn,
-      mediaData.notes
+      mediaData.title, mediaData.author, mediaData.type,
+      mediaData.isbn, mediaData.notes, mediaData.genres,
+      mediaData.date, mediaData.abstract, mediaData.subjects,
+      mediaData.description, mediaData.publisher, mediaData.place,
+      mediaData.classification, mediaData.barcodes
     );
     return { success: result.success, error: result.error };
   }
@@ -355,7 +368,7 @@ function processCheckout(
   resourceId: string,
   title: string,
   borrowerName: string,
-  loanDays: number = 14
+  loanDays: number = 21
 ): { success: boolean; error?: string } {
   const user = Session.getActiveUser().getEmail();
   writeAuditLog(user, `checked out "${title}" (barcode=${barcode}) to ${borrowerName} (borrower=${borrowerId}) for ${loanDays} days`);
@@ -412,8 +425,6 @@ function extendLoan(loanId: string, days: number): { success: boolean; error?: s
 (globalThis as Record<string, unknown>).getActiveBorrowers = getActiveBorrowers;
 (globalThis as Record<string, unknown>).searchBorrowers = searchBorrowers;
 (globalThis as Record<string, unknown>).saveBorrower = saveBorrower;
-(globalThis as Record<string, unknown>).suspendBorrowerById = suspendBorrowerById;
-(globalThis as Record<string, unknown>).activateBorrowerById = activateBorrowerById;
 
 // Media functions
 (globalThis as Record<string, unknown>).getAllMedia = getAllMedia;

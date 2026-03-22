@@ -11,7 +11,7 @@ import {getLoanService} from "./loans";
  */
 class MediaService extends BaseEntityService<Media> {
   constructor() {
-    super('Media', MEDIA_COLUMNS);
+    super('Media', MEDIA_COLUMNS, 'R');
   }
 
   /**
@@ -19,18 +19,23 @@ class MediaService extends BaseEntityService<Media> {
    */
   createMedia(
     title: string,
-    author: string,
-    type: MediaType = 'book',
+    author: string = '',
+    type: string = '',
     isbn: string = '',
-    notes: string = ''
+    notes: string = '',
+    genres: string = '',
+    date: string = '',
+    abstract: string = '',
+    subjects: string = '',
+    description: string = '',
+    publisher: string = '',
+    place: string = '',
+    classification: string = '',
+    barcodes: string = ''
   ): OperationResult<Media> {
     return this.create({
-      title,
-      author,
-      type,
-      isbn,
-      status: 'available' as MediaStatus,
-      notes,
+      title, author, type, isbn, notes, genres, date, abstract,
+      subjects, description, publisher, place, classification, barcodes,
     });
   }
 
@@ -76,6 +81,12 @@ class MediaService extends BaseEntityService<Media> {
     const matches = availableResourcesByBarcode.filter(
       (m) =>
         `${m.resource.title}`.toLowerCase().includes(lowerQuery) ||
+        `${m.resource.author}`.toLowerCase().includes(lowerQuery) ||
+        `${m.resource.place}`.toLowerCase().includes(lowerQuery) ||
+        `${m.resource.abstract}`.toLowerCase().includes(lowerQuery) ||
+        `${m.resource.notes}`.toLowerCase().includes(lowerQuery) ||
+        `${m.resource.subjects}`.toLowerCase().includes(lowerQuery) ||
+        `${m.resource.description}`.toLowerCase().includes(lowerQuery) ||
         `${m.barcode}`.toLowerCase().includes(lowerQuery)
     ).map(m => ({
       id: m.resource.id,
