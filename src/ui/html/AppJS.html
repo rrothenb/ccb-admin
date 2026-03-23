@@ -171,6 +171,7 @@ function loadMedia() {
     }
     console.log({function: 'renderMedia', mediaLength: media.length})
     tbody.innerHTML = media
+      .slice().sort((a, b) => `${a.title}`.localeCompare(`${b.title}`))
       .map(function (m) {
         return (
           '<tr data-id="' + m.id + '">' +
@@ -198,9 +199,12 @@ function loadMedia() {
       return;
     }
 
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
     tbody.innerHTML = loans
       .sort((a, b) => new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime())
       .map(function (l) {
+        var status = new Date(l.dueDate) < today ? 'overdue' : 'active';
         return (
           '<tr data-id="' + l.id + '">' +
           '<td>' + escapeHtml(l.borrowerName) + '</td>' +
@@ -209,7 +213,7 @@ function loadMedia() {
           '<td>' + escapeHtml(l.barcode) + '</td>' +
           '<td>' + escapeHtml(l.checkoutDate) + '</td>' +
           '<td>' + escapeHtml(l.dueDate) + '</td>' +
-          '<td><span class="status-badge status-' + l.status + '">' + l.status + '</span></td>' +
+          '<td><span class="status-badge status-' + status + '">' + status + '</span></td>' +
           '<td class="actions-cell">' +
           '<button class="btn btn-success" onclick="returnLoan(\'' + l.id + '\')">Return</button>' +
           '<button class="btn btn-secondary" onclick="extendLoan(\'' + l.id + '\')">Extend</button>' +
@@ -276,8 +280,10 @@ function loadMedia() {
 
   function showOverdueOnly() {
     showingOverdueOnly = true;
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
     var filtered = allLoans.filter(function (l) {
-      return l.status === 'overdue';
+      return new Date(l.dueDate) < today;
     });
     renderLoans(filtered);
   }

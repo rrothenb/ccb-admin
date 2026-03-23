@@ -2,7 +2,7 @@
  * Media service - CRUD operations for library media items
  */
 
-import { Media, MediaType, MediaStatus, MEDIA_COLUMNS, OperationResult } from '../types';
+import { Media, MediaType, MEDIA_COLUMNS, OperationResult } from '../types';
 import { BaseEntityService } from './base-service';
 import {getLoanService} from "./loans";
 
@@ -110,58 +110,7 @@ class MediaService extends BaseEntityService<Media> {
     return { success: true, data: filtered };
   }
 
-  /**
-   * Updates the status of a media item
-   */
-  updateStatus(id: string, status: MediaStatus): OperationResult<Media> {
-    return this.update(id, { status: status ?? 'Available'});
-  }
 
-  /**
-   * Marks a media item as on loan
-   */
-  markAsOnLoan(id: string): OperationResult<Media> {
-    return this.updateStatus(id, 'on-loan');
-  }
-
-  /**
-   * Marks a media item as available
-   */
-  markAsAvailable(id: string): OperationResult<Media> {
-    return this.updateStatus(id, 'available');
-  }
-
-  /**
-   * Marks a media item as lost
-   */
-  markAsLost(id: string): OperationResult<Media> {
-    return this.updateStatus(id, 'lost');
-  }
-
-  /**
-   * Checks if a media item is available for checkout
-   */
-  isAvailable(id: string): OperationResult<boolean> {
-    const result = this.getById(id);
-    if (!result.success || !result.data) {
-      return { success: false, error: result.error };
-    }
-
-    return { success: true, data: !result.data.status || result.data.status === 'available' };
-  }
-
-  /**
-   * Gets all media items currently on loan
-   */
-  getOnLoanMedia(): OperationResult<Media[]> {
-    const result = this.getAll();
-    if (!result.success || !result.data) {
-      return result;
-    }
-
-    const onLoan = result.data.filter((m) => m.status === 'on-loan');
-    return { success: true, data: onLoan };
-  }
 }
 
 // Singleton instance

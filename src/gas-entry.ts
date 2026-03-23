@@ -79,22 +79,6 @@ function clearConfig(): void {
 // ============================================================================
 
 /**
- * Updates overdue loan statuses
- */
-function updateOverdueStatuses(): { updated: number; error?: string } {
-  const loanService = getLoanService();
-  const result = loanService.updateOverdueStatuses();
-
-  if (result.success) {
-    Logger.log(`Updated ${result.data} loans to overdue status.`);
-    return { updated: result.data || 0 };
-  } else {
-    Logger.log(`Update failed: ${result.error}`);
-    return { updated: 0, error: result.error };
-  }
-}
-
-/**
  * Initializes headers on all master sheets
  */
 function initializeAllHeaders(): void {
@@ -341,10 +325,8 @@ function getActiveLoans(): unknown[] {
   if (!loansResult.success || !loansResult.data) {
     return [];
   }
-  console.log(loansResult.data.length)
-  console.log(loansResult.data[0])
 
-  return loansResult.data.filter(loan => ['active', 'overdue'].includes(loan.status));
+  return loansResult.data;
 }
 
 /**
@@ -415,7 +397,7 @@ function extendLoan(loanId: string, days: number): { success: boolean; error?: s
 (globalThis as Record<string, unknown>).runDiscovery = runDiscovery;
 (globalThis as Record<string, unknown>).showConfig = showConfig;
 (globalThis as Record<string, unknown>).clearConfig = clearConfig;
-(globalThis as Record<string, unknown>).updateOverdueStatuses = updateOverdueStatuses;
+
 (globalThis as Record<string, unknown>).initializeAllHeaders = initializeAllHeaders;
 (globalThis as Record<string, unknown>).setAuditLogSpreadsheetId = setAuditLogSpreadsheetId;
 (globalThis as Record<string, unknown>).getAuditLogSpreadsheetId = getAuditLogSpreadsheetId;
