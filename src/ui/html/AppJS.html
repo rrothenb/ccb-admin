@@ -432,6 +432,13 @@ function loadMedia() {
   // MEDIA ACTIONS
   // ============================================================================
 
+  function generateBarcode() {
+    var d1 = Array.from({length: 5}, function() { return Math.floor(Math.random() * 10); }).join('');
+    var letter = String.fromCharCode(65 + Math.floor(Math.random() * 26));
+    var d2 = Array.from({length: 4}, function() { return Math.floor(Math.random() * 10); }).join('');
+    return 'R' + d1 + letter + d2;
+  }
+
   function showAddMediaModal() {
     showModal(
       'Add Media',
@@ -449,7 +456,7 @@ function loadMedia() {
         '<div class="form-group"><label for="m-publisher">Publisher</label><input type="text" id="m-publisher"></div>' +
         '<div class="form-group"><label for="m-place">Place</label><input type="text" id="m-place"></div>' +
         '<div class="form-group"><label for="m-classification">Classification</label><input type="text" id="m-classification"></div>' +
-        '<div class="form-group"><label for="m-barcodes">Barcodes</label><input type="text" id="m-barcodes"></div>' +
+        '<div class="form-group"><label for="m-barcodes">Barcodes</label><input type="text" id="m-barcodes" value="' + generateBarcode() + '"></div>' +
         '<input type="hidden" id="m-id" value="">' +
         '<button type="submit" class="btn btn-primary">Save Media</button>' +
         '</form>'

@@ -11,7 +11,7 @@ import {getLoanService} from "./loans";
  */
 class MediaService extends BaseEntityService<Media> {
   constructor() {
-    super('Media', MEDIA_COLUMNS, 'R');
+    super('Media', MEDIA_COLUMNS, 'M');
   }
 
   /**
