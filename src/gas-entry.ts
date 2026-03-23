@@ -356,10 +356,10 @@ function processCheckout(
  */
 function returnLoanById(id: string): { success: boolean; error?: string } {
   const user = Session.getActiveUser().getEmail();
-  writeAuditLog(user, `returned loan: ${id}`);
 
   const service = getLoanService();
   const result = service.processReturn(id);
+  writeAuditLog(user, `returned loan: ${JSON.stringify(result)}`);
   return { success: result.success, error: result.error };
 }
 
