@@ -100,9 +100,6 @@ Loans: ${loanResult.success ? 'OK' : loanResult.error}`);
  * Gets all borrowers
  */
 function getAllBorrowers(): unknown[] {
-  const user = Session.getActiveUser().getEmail();
-  writeAuditLog(user,`[AUDIT] Hopefully ${user} retrieved all borrowers`);
-
   const service = getBorrowerService();
   const result = service.getAll();
   return result.success && result.data ? result.data.sort((a, b) => a.name.localeCompare(b.name)) : [];
@@ -112,9 +109,6 @@ function getAllBorrowers(): unknown[] {
  * Gets active borrowers only
  */
 function getActiveBorrowers(): unknown[] {
-  const user = Session.getActiveUser().getEmail();
-  writeAuditLog(user, 'retrieved active borrowers');
-
   const service = getBorrowerService();
   const result = service.getActiveBorrowers();
   return result.success && result.data ? result.data.sort((a, b) => a.name.localeCompare(b.name)) : [];
@@ -124,9 +118,6 @@ function getActiveBorrowers(): unknown[] {
  * Searches borrowers
  */
 function searchBorrowers(query: string): unknown[] {
-  const user = Session.getActiveUser().getEmail();
-  Logger.log(`[AUDIT] ${user} searched borrowers: "${query}"`);
-
   const service = getBorrowerService();
   const result = service.searchBorrowers(query);
   return result.success && result.data ? result.data : [];
