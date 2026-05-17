@@ -397,6 +397,88 @@
     return 'R' + d1 + letter + d2;
   }
 
+  function splitBarcodes(raw) {
+    if (!raw) return [];
+    return String(raw).split('|').map(function (b) { return b.trim(); }).filter(Boolean);
+  }
+
+  function parseResourceBox(raw) {
+    if (!raw) return {};
+    try {
+      var parsed = JSON.parse(raw);
+      return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function findBoxContents(ownBarcodes, ownId) {
+    if (!ownBarcodes.length) return [];
+    var set = {};
+    ownBarcodes.forEach(function (b) { set[b] = true; });
+    var contents = [];
+    allMedia.forEach(function (m) {
+      if (ownId && m.id == ownId) return;
+      var mapping = parseResourceBox(m.resourceBox);
+      Object.keys(mapping).forEach(function (childBarcode) {
+        if (set[mapping[childBarcode]]) {
+          contents.push({ title: m.title, childBarcode: childBarcode, boxBarcode: mapping[childBarcode] });
+        }
+      });
+    });
+    return contents;
+  }
+
+  function renderBoxRowsHtml(barcodes, mapping) {
+    if (!barcodes.length) {
+      return '<div class="form-help" style="color:#6b7280;font-size:0.9em">Enter at least one barcode above to assign this resource to a box.</div>';
+    }
+    var showLabel = barcodes.length > 1;
+    return barcodes.map(function (bc) {
+      var val = (mapping && mapping[bc]) || '';
+      var labelHtml = showLabel
+        ? '<span style="min-width:140px;font-family:monospace;font-size:0.9em">' + escapeHtml(bc) + '</span>'
+        : '';
+      return '<div class="box-row" style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
+        labelHtml +
+        '<input type="text" class="box-row-input" data-barcode="' + escapeAttr(bc) + '" value="' + escapeAttr(val) + '" placeholder="Scan box barcode (blank if standalone)" style="flex:1">' +
+        '</div>';
+    }).join('');
+  }
+
+  function renderBoxContentsHtml(contents, showBoxBarcode) {
+    if (!contents.length) return '';
+    var rows = contents.map(function (c) {
+      var detail = showBoxBarcode
+        ? escapeHtml(c.childBarcode) + ' → ' + escapeHtml(c.boxBarcode)
+        : escapeHtml(c.childBarcode);
+      return '<li>' + escapeHtml(c.title) + ' <span style="color:#6b7280;font-family:monospace;font-size:0.9em">(' + detail + ')</span></li>';
+    }).join('');
+    return '<div class="form-group">' +
+      '<label>Contents of this box</label>' +
+      '<ul style="margin:0;padding-left:20px;color:#374151">' + rows + '</ul>' +
+      '</div>';
+  }
+
+  function refreshBoxRows() {
+    var rowsEl = document.getElementById('m-box-rows');
+    if (!rowsEl) return;
+    var currentBarcodes = splitBarcodes(document.getElementById('m-barcodes').value);
+    var existing = {};
+    rowsEl.querySelectorAll('.box-row-input').forEach(function (input) {
+      var bc = input.getAttribute('data-barcode');
+      if (input.value) existing[bc] = input.value.trim();
+    });
+    rowsEl.innerHTML = renderBoxRowsHtml(currentBarcodes, existing);
+  }
+
+  function wireBoxRowRefresh() {
+    var barcodesEl = document.getElementById('m-barcodes');
+    if (barcodesEl) {
+      barcodesEl.addEventListener('input', refreshBoxRows);
+    }
+  }
+
   function showAddMediaModal() {
     showModal(
       'Add Resource',
@@ -407,10 +489,14 @@
         '<div class="form-group"><label for="m-classification">Classification</label><input type="text" id="m-classification"></div>' +
         '<input type="hidden" id="m-id" value="">' +
         '<div class="form-group"><label for="m-barcodes">Barcodes *</label><input type="text" id="m-barcodes" required placeholder="Scan barcode..." title="Scan the barcode label on this resource — use | to separate multiple copies"></div>' +
-        '<div class="form-group"><label for="m-resourceBox">Resource Box</label><input type="text" id="m-resourceBox"></div>' +
+        '<div class="form-group">' +
+        '<label>Inside box</label>' +
+        '<div id="m-box-rows">' + renderBoxRowsHtml([], {}) + '</div>' +
+        '</div>' +
         '<button type="submit" class="btn btn-primary">Save Resource</button>' +
         '</form>'
     );
+    wireBoxRowRefresh();
   }
 
   function editMedia(id) {
@@ -422,6 +508,18 @@
       showStatus('Media not found', 'error');
       return;
     }
+
+    var ownBarcodes = splitBarcodes(media.barcodes);
+    var mapping = parseResourceBox(media.resourceBox);
+    var contents = findBoxContents(ownBarcodes, media.id);
+    var isBox = contents.length > 0;
+
+    var insideBoxHtml = isBox
+      ? '<input type="hidden" id="m-resourceBox-preserved" value="' + escapeAttr(media.resourceBox || '') + '">'
+      : '<div class="form-group">' +
+        '<label>Inside box</label>' +
+        '<div id="m-box-rows">' + renderBoxRowsHtml(ownBarcodes, mapping) + '</div>' +
+        '</div>';
 
     showModal(
       'Edit Resource',
@@ -446,14 +544,28 @@
       '<label for="m-barcodes">Barcodes</label>' +
       '<input type="text" id="m-barcodes" value="' + escapeAttr(media.barcodes || '') + '">' +
       '</div>' +
-      '<div class="form-group">' +
-      '<label for="m-resourceBox">Resource Box</label>' +
-      '<input type="text" id="m-resourceBox" value="' + escapeAttr(media.resourceBox || '') + '">' +
-      '</div>' +
+      insideBoxHtml +
+      renderBoxContentsHtml(contents, ownBarcodes.length > 1) +
         '<input type="hidden" id="m-id" value="' + media.id + '">' +
         '<button type="submit" class="btn btn-primary">Save Resource</button>' +
         '</form>'
     );
+    if (!isBox) wireBoxRowRefresh();
+  }
+
+  function collectResourceBox() {
+    var rowsEl = document.getElementById('m-box-rows');
+    if (!rowsEl) {
+      var preserved = document.getElementById('m-resourceBox-preserved');
+      return preserved ? preserved.value : '';
+    }
+    var out = {};
+    rowsEl.querySelectorAll('.box-row-input').forEach(function (input) {
+      var bc = (input.getAttribute('data-barcode') || '').trim();
+      var val = (input.value || '').trim();
+      if (bc && val) out[bc] = val;
+    });
+    return Object.keys(out).length ? JSON.stringify(out) : '';
   }
 
   function submitMedia(event) {
@@ -467,7 +579,7 @@
       type: document.getElementById('m-type').value,
       classification: document.getElementById('m-classification').value,
       barcodes: document.getElementById('m-barcodes').value,
-      resourceBox: document.getElementById('m-resourceBox').value,
+      resourceBox: collectResourceBox(),
     };
 
     google.script.run
@@ -617,11 +729,7 @@
             '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6">' + escapeHtml(barcode) + '</td>' +
             '</tr>';
         } else {
-          var errEl = document.getElementById('co-error');
-          if (errEl) {
-            errEl.textContent = result.error || 'Checkout failed';
-            errEl.style.display = 'block';
-          }
+          showErrorDialog(result.error || 'Checkout failed');
         }
       })
       .withFailureHandler(function (error) {
@@ -688,7 +796,7 @@
             '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6">' + escapeHtml(barcode) + '</td>' +
             '</tr>';
         } else {
-          showStatus(result.error || 'Return failed', 'error');
+          showErrorDialog(result.error || 'Return failed');
         }
       })
       .withFailureHandler(function (error) {
@@ -760,7 +868,7 @@
             '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6">' + escapeHtml(result.newDueDate) + '</td>' +
             '</tr>';
         } else {
-          showStatus(result.error || 'Extension failed', 'error');
+          showErrorDialog(result.error || 'Extension failed');
         }
       })
       .withFailureHandler(function (error) {
@@ -787,6 +895,14 @@
     if (typeof text == 'number') return text;
     if (!text || typeof text !== 'string') return '';
     return text.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function showErrorDialog(message) {
+    showModal(
+      'Error',
+      '<p style="white-space:pre-wrap;margin:0 0 16px 0">' + escapeHtml(message) + '</p>' +
+      '<button type="button" class="btn btn-primary" onclick="closeModal()">OK</button>'
+    );
   }
 
   function showStatus(message, type) {
