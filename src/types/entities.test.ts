@@ -17,9 +17,12 @@ describe('Entity Column Definitions', () => {
         'name',
         'email',
         'phone',
-        'status',
-        'joinDate',
-        'notes',
+        'gender',
+        'address',
+        'postcode',
+        'borrowerType',
+        'expiryDate',
+        'memberSince',
       ]);
     });
 
@@ -35,9 +38,9 @@ describe('Entity Column Definitions', () => {
         'title',
         'author',
         'type',
-        'isbn',
-        'status',
-        'notes',
+        'classification',
+        'barcodes',
+        'resourceBox',
       ]);
     });
 
@@ -50,12 +53,12 @@ describe('Entity Column Definitions', () => {
     it('should have the correct columns in order', () => {
       expect(LOAN_COLUMNS).toEqual([
         'id',
-        'borrowerId',
         'barcode',
-        'checkout',
-        'due',
-        'returnDate',
-        'status',
+        'title',
+        'checkoutDate',
+        'dueDate',
+        'borrowerName',
+        'borrowerId',
       ]);
     });
 

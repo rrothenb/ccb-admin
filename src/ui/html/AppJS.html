@@ -3,7 +3,7 @@
    * CCB Admin Web App - Client-side JavaScript
    */
 
-  let currentTab = 'Borrowers';
+  let currentTab = 'Circulation';
   let allBorrowers = [];
   let allMedia = [];
   let allLoans = [];
@@ -54,10 +54,13 @@
   // ============================================================================
 
   function loadTabData(tabName) {
-    if (tabName === 'Borrowers') {
+    if (tabName === 'Circulation') {
+      // Static tab — nothing to load
+    } else if (tabName === 'Borrowers') {
       loadBorrowers();
     } else if (tabName === 'Media') {
-      loadMedia();
+      document.getElementById('media-tbody').innerHTML =
+        '<tr><td colspan="5" class="empty-state">Enter a search term to find resources</td></tr>';
     } else if (tabName === 'Loans') {
       loadLoans();
     }
@@ -75,50 +78,6 @@
       .withFailureHandler(handleError)
       .getActiveBorrowers();
   }
-
-async function decompressFromServer(compressed) {
-  var binaryString = atob(compressed);
-  var bytes = new Uint8Array(binaryString.length);
-  for (var i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  var ds = new DecompressionStream('gzip');
-  var writer = ds.writable.getWriter();
-  writer.write(bytes);
-  writer.close();
-  var reader = ds.readable.getReader();
-  var chunks = [];
-  while (true) {
-    var result = await reader.read();
-    if (result.done) break;
-    chunks.push(result.value);
-  }
-  var totalLength = chunks.reduce(function(sum, c) { return sum + c.length; }, 0);
-  var merged = new Uint8Array(totalLength);
-  var offset = 0;
-  chunks.forEach(function(chunk) {
-    merged.set(chunk, offset);
-    offset += chunk.length;
-  });
-  return JSON.parse(new TextDecoder().decode(merged));
-}
-
-function loadMedia() {
-    console.log('in loadMedia...')
-    document.getElementById('media-tbody').innerHTML =
-      '<tr><td colspan="5" class="loading">Loading...</td></tr>';
-
-  google.script.run
-    .withSuccessHandler(function (compressed) {
-      decompressFromServer(compressed).then(function (media) {
-        console.log('success', media)
-        allMedia = media || [];
-        renderMedia(allMedia);
-      }).catch(handleError);
-    })
-    .withFailureHandler(handleError)
-    .getAllMedia();
-}
 
   function loadLoans() {
     document.getElementById('loans-tbody').innerHTML =
@@ -142,7 +101,7 @@ function loadMedia() {
   function renderBorrowers(borrowers) {
     var tbody = document.getElementById('borrowers-tbody');
     if (!borrowers || borrowers.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No borrowers found</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No members found</td></tr>';
       return;
     }
 
@@ -166,7 +125,7 @@ function loadMedia() {
     var tbody = document.getElementById('media-tbody');
 
     if (!media || media.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No media found</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No resources found</td></tr>';
       return;
     }
     console.log({function: 'renderMedia', mediaLength: media.length})
@@ -214,10 +173,6 @@ function loadMedia() {
           '<td>' + escapeHtml(l.checkoutDate) + '</td>' +
           '<td>' + escapeHtml(l.dueDate) + '</td>' +
           '<td><span class="status-badge status-' + status + '">' + status + '</span></td>' +
-          '<td class="actions-cell">' +
-          '<button class="btn btn-success" onclick="returnLoan(\'' + l.id + '\')">Return</button>' +
-          '<button class="btn btn-secondary" onclick="extendLoan(\'' + l.id + '\')">Extend</button>' +
-          '</td>' +
           '</tr>'
         );
       })
@@ -250,32 +205,28 @@ function loadMedia() {
   }
 
   function searchMediaUI() {
-    console.log('in searchMediaUI...')
-    var query = document.getElementById('media-search').value.trim().toLowerCase();
+    var query = document.getElementById('media-search').value.trim();
     if (!query) {
-      renderMedia(allMedia);
+      document.getElementById('media-tbody').innerHTML =
+        '<tr><td colspan="5" class="empty-state">Enter a search term to find resources</td></tr>';
       return;
     }
-
-    var filtered = allMedia.filter(function (m) {
-      return (
-        (m.title && `${m.title}`.toLowerCase().indexOf(query) !== -1) ||
-        (m.author && `${m.author}`.toLowerCase().indexOf(query) !== -1) ||
-        (m.place && `${m.place}`.toLowerCase().indexOf(query) !== -1) ||
-        (m.abstract && `${m.abstract}`.toLowerCase().indexOf(query) !== -1) ||
-        (m.notes && `${m.notes}`.toLowerCase().indexOf(query) !== -1) ||
-        (m.subjects && `${m.subjects}`.toLowerCase().indexOf(query) !== -1) ||
-        (m.description && `${m.description}`.toLowerCase().indexOf(query) !== -1) ||
-        (m.barcodes && `${m.barcodes}`.toLowerCase().indexOf(query) !== -1)
-      );
-    });
-    renderMedia(filtered);
+    document.getElementById('media-tbody').innerHTML =
+      '<tr><td colspan="5" class="loading">Searching...</td></tr>';
+    google.script.run
+      .withSuccessHandler(function (results) {
+        allMedia = results || [];
+        renderMedia(allMedia);
+      })
+      .withFailureHandler(handleError)
+      .searchAllMedia(query);
   }
 
   function clearMediaSearch() {
-    console.log('in clearMediaSearch...')
     document.getElementById('media-search').value = '';
-    renderMedia(allMedia);
+    allMedia = [];
+    document.getElementById('media-tbody').innerHTML =
+      '<tr><td colspan="5" class="empty-state">Enter a search term to find resources</td></tr>';
   }
 
   function showOverdueOnly() {
@@ -332,19 +283,19 @@ function loadMedia() {
     var nextYear = new Date(today);
     nextYear.setFullYear(nextYear.getFullYear() + 1);
     showModal(
-      'Add Borrower',
+      'Add Member',
       '<form id="borrower-form" onsubmit="submitBorrower(event)">' +
-        '<div class="form-group"><label for="b-name">Name *</label><input type="text" id="b-name" required></div>' +
-        '<div class="form-group"><label for="b-email">Email *</label><input type="email" id="b-email" required></div>' +
-        '<div class="form-group"><label for="b-phone">Phone</label><input type="text" id="b-phone"></div>' +
+        '<div class="form-group"><label for="b-name">Name *</label><input type="text" id="b-name" required title="Full name of the member"></div>' +
+        '<div class="form-group"><label for="b-email">Email *</label><input type="email" id="b-email" required title="Email address used for login and contact"></div>' +
+        '<div class="form-group"><label for="b-phone">Phone</label><input type="text" id="b-phone" title="Contact phone number"></div>' +
         '<div class="form-group"><label for="b-gender">Gender</label><input type="text" id="b-gender"></div>' +
         '<div class="form-group"><label for="b-address">Address</label><input type="text" id="b-address"></div>' +
         '<div class="form-group"><label for="b-postcode">Postcode</label><input type="text" id="b-postcode"></div>' +
-        '<div class="form-group"><label for="b-borrowerType">Borrower Type</label><input type="text" id="b-borrowerType"></div>' +
-        '<div class="form-group"><label for="b-expiryDate">Expiry Date *</label><input type="text" id="b-expiryDate" value="' + formatDate(nextYear) + '" required></div>' +
-        '<div class="form-group"><label for="b-memberSince">Member Since *</label><input type="text" id="b-memberSince" value="' + formatDate(today) + '" required></div>' +
+        '<div class="form-group"><label for="b-borrowerType">Member Type</label><input type="text" id="b-borrowerType" title="e.g. Adult, Child, Senior, Staff"></div>' +
+        '<div class="form-group"><label for="b-expiryDate">Expiry Date *</label><input type="text" id="b-expiryDate" value="' + formatDate(nextYear) + '" required title="Date when this membership expires"></div>' +
+        '<div class="form-group"><label for="b-memberSince">Member Since *</label><input type="text" id="b-memberSince" value="' + formatDate(today) + '" required title="Date when the member first joined"></div>' +
         '<input type="hidden" id="b-id" value="">' +
-        '<button type="submit" class="btn btn-primary">Save Borrower</button>' +
+        '<button type="submit" class="btn btn-primary">Save Member</button>' +
         '</form>'
     );
   }
@@ -359,7 +310,7 @@ function loadMedia() {
     }
 
     showModal(
-      'Edit Borrower',
+      'Edit Member',
       '<form id="borrower-form" onsubmit="submitBorrower(event)">' +
         '<div class="form-group">' +
         '<label for="b-name">Name *</label>' +
@@ -386,7 +337,7 @@ function loadMedia() {
       '<input type="text" id="b-postcode" value="' + escapeAttr(borrower.postcode || '') + '">' +
       '</div>' +
       '<div class="form-group">' +
-      '<label for="b-borrowerType">Borrower Type</label>' +
+      '<label for="b-borrowerType">Member Type</label>' +
       '<input type="text" id="b-borrowerType" value="' + escapeAttr(borrower.borrowerType || '') + '">' +
       '</div>' +
       '<div class="form-group">' +
@@ -398,7 +349,7 @@ function loadMedia() {
       '<input type="text" id="b-memberSince" value="' + escapeAttr(borrower.memberSince || '') + '">' +
       '</div>' +
         '<input type="hidden" id="b-id" value="' + borrower.id + '">' +
-        '<button type="submit" class="btn btn-primary">Save Borrower</button>' +
+        '<button type="submit" class="btn btn-primary">Save Member</button>' +
         '</form>'
     );
   }
@@ -423,11 +374,11 @@ function loadMedia() {
     google.script.run
       .withSuccessHandler(function (result) {
         if (result.success) {
-          showStatus('Borrower saved!', 'success');
+          showStatus('Member saved!', 'success');
           closeModal();
           loadBorrowers();
         } else {
-          showStatus(result.error || 'Failed to save borrower', 'error');
+          showStatus(result.error || 'Failed to save member', 'error');
         }
       })
       .withFailureHandler(handleError)
@@ -448,24 +399,16 @@ function loadMedia() {
 
   function showAddMediaModal() {
     showModal(
-      'Add Media',
+      'Add Resource',
       '<form id="media-form" onsubmit="submitMedia(event)">' +
         '<div class="form-group"><label for="m-title">Title *</label><input type="text" id="m-title" required></div>' +
         '<div class="form-group"><label for="m-author">Author</label><input type="text" id="m-author"></div>' +
         '<div class="form-group"><label for="m-type">Type</label><input type="text" id="m-type"></div>' +
-        '<div class="form-group"><label for="m-isbn">ISBN</label><input type="text" id="m-isbn"></div>' +
-        '<div class="form-group"><label for="m-notes">Notes</label><textarea id="m-notes" rows="3"></textarea></div>' +
-        '<div class="form-group"><label for="m-genres">Genres</label><input type="text" id="m-genres"></div>' +
-        '<div class="form-group"><label for="m-date">Date</label><input type="text" id="m-date"></div>' +
-        '<div class="form-group"><label for="m-abstract">Abstract</label><textarea id="m-abstract" rows="3"></textarea></div>' +
-        '<div class="form-group"><label for="m-subjects">Subjects</label><input type="text" id="m-subjects"></div>' +
-        '<div class="form-group"><label for="m-description">Description</label><input type="text" id="m-description"></div>' +
-        '<div class="form-group"><label for="m-publisher">Publisher</label><input type="text" id="m-publisher"></div>' +
-        '<div class="form-group"><label for="m-place">Place</label><input type="text" id="m-place"></div>' +
         '<div class="form-group"><label for="m-classification">Classification</label><input type="text" id="m-classification"></div>' +
-        '<div class="form-group"><label for="m-barcodes">Barcodes</label><input type="text" id="m-barcodes" value="' + generateBarcode() + '"></div>' +
         '<input type="hidden" id="m-id" value="">' +
-        '<button type="submit" class="btn btn-primary">Save Media</button>' +
+        '<div class="form-group"><label for="m-barcodes">Barcodes *</label><input type="text" id="m-barcodes" required placeholder="Scan barcode..." title="Scan the barcode label on this resource — use | to separate multiple copies"></div>' +
+        '<div class="form-group"><label for="m-resourceBox">Resource Box</label><input type="text" id="m-resourceBox"></div>' +
+        '<button type="submit" class="btn btn-primary">Save Resource</button>' +
         '</form>'
     );
   }
@@ -481,7 +424,7 @@ function loadMedia() {
     }
 
     showModal(
-      'Edit Media',
+      'Edit Resource',
       '<form id="media-form" onsubmit="submitMedia(event)">' +
         '<div class="form-group">' +
         '<label for="m-title">Title *</label>' +
@@ -495,42 +438,6 @@ function loadMedia() {
       '<label for="m-type">Type</label>' +
       '<input type="text" id="m-type" value="' + escapeAttr(media.type || '') + '">' +
       '</div>' +
-        '<div class="form-group">' +
-        '<label for="m-isbn">ISBN</label>' +
-        '<input type="text" id="m-isbn" value="' + escapeAttr(media.isbn || '') + '">' +
-        '</div>' +
-        '<div class="form-group">' +
-        '<label for="m-notes">Notes</label>' +
-        '<textarea id="m-notes" rows="3">' + escapeHtml(media.notes || '') + '</textarea>' +
-        '</div>' +
-      '<div class="form-group">' +
-      '<label for="m-genres">Genres</label>' +
-      '<input type="text" id="m-genres" value="' + escapeAttr(media.genres || '') + '">' +
-      '</div>' +
-      '<div class="form-group">' +
-      '<label for="m-date">Date</label>' +
-      '<input type="text" id="m-date" value="' + escapeAttr(media.date || '') + '">' +
-      '</div>' +
-      '<div class="form-group">' +
-      '<label for="m-abstract">Abstract</label>' +
-      '<textarea id="m-abstract" rows="3">' + escapeHtml(media.abstract || '') + '</textarea>' +
-      '</div>' +
-      '<div class="form-group">' +
-      '<label for="m-subjects">Subjects</label>' +
-      '<input type="text" id="m-subjects" value="' + escapeAttr(media.subjects || '') + '">' +
-      '</div>' +
-      '<div class="form-group">' +
-      '<label for="m-description">Description</label>' +
-      '<input type="text" id="m-description" value="' + escapeAttr(media.description || '') + '">' +
-      '</div>' +
-      '<div class="form-group">' +
-      '<label for="m-publisher">Publisher</label>' +
-      '<input type="text" id="m-publisher" value="' + escapeAttr(media.publisher || '') + '">' +
-      '</div>' +
-      '<div class="form-group">' +
-      '<label for="m-place">Place</label>' +
-      '<input type="text" id="m-place" value="' + escapeAttr(media.place || '') + '">' +
-      '</div>' +
       '<div class="form-group">' +
       '<label for="m-classification">Classification</label>' +
       '<input type="text" id="m-classification" value="' + escapeAttr(media.classification || '') + '">' +
@@ -539,8 +446,12 @@ function loadMedia() {
       '<label for="m-barcodes">Barcodes</label>' +
       '<input type="text" id="m-barcodes" value="' + escapeAttr(media.barcodes || '') + '">' +
       '</div>' +
+      '<div class="form-group">' +
+      '<label for="m-resourceBox">Resource Box</label>' +
+      '<input type="text" id="m-resourceBox" value="' + escapeAttr(media.resourceBox || '') + '">' +
+      '</div>' +
         '<input type="hidden" id="m-id" value="' + media.id + '">' +
-        '<button type="submit" class="btn btn-primary">Save Media</button>' +
+        '<button type="submit" class="btn btn-primary">Save Resource</button>' +
         '</form>'
     );
   }
@@ -554,259 +465,311 @@ function loadMedia() {
       title: document.getElementById('m-title').value,
       author: document.getElementById('m-author').value,
       type: document.getElementById('m-type').value,
-      isbn: document.getElementById('m-isbn').value,
-      notes: document.getElementById('m-notes').value,
-      genres: document.getElementById('m-genres').value,
-      date: document.getElementById('m-date').value,
-      abstract: document.getElementById('m-abstract').value,
-      subjects: document.getElementById('m-subjects').value,
-      description: document.getElementById('m-description').value,
-      publisher: document.getElementById('m-publisher').value,
-      place: document.getElementById('m-place').value,
       classification: document.getElementById('m-classification').value,
       barcodes: document.getElementById('m-barcodes').value,
+      resourceBox: document.getElementById('m-resourceBox').value,
     };
 
     google.script.run
       .withSuccessHandler(function (result) {
         if (result.success) {
-          showStatus('Media saved!', 'success');
+          showStatus('Resource saved!', 'success');
           closeModal();
-          loadMedia();
+          searchMediaUI();
         } else {
-          showStatus(result.error || 'Failed to save media', 'error');
+          showStatus(result.error || 'Failed to save resource', 'error');
         }
       })
       .withFailureHandler(handleError)
       .saveMedia(data);
   }
 
-  // ============================================================================
-  // LOAN ACTIONS
-  // ============================================================================
-
-  function showCheckoutModal() {
-    showModal(
-      'New Checkout',
-      '<form id="checkout-form" onsubmit="submitCheckout(event)">' +
-        '<div class="form-group">' +
-        '<label for="c-borrower">Borrower *</label>' +
-        '<input type="text" id="c-borrower-search" placeholder="Type 2+ characters to search by name or email..." autocomplete="off">' +
-        '<div id="c-borrower-results" class="autocomplete-results"></div>' +
-        '<input type="hidden" id="c-borrower" required>' +
-        '<input type="hidden" id="c-borrower-name" required>' +
-        '</div>' +
-        '<div class="form-group">' +
-        '<label for="c-media">Media Item *</label>' +
-        '<input type="text" id="c-media-search" placeholder="Type 2+ characters to search by title, author, barcode, or more..." autocomplete="off">' +
-        '<div id="c-media-results" class="autocomplete-results"></div>' +
-        '<input type="hidden" id="c-media" required>' +
-        '<input type="hidden" id="c-media-name" required>' +
-        '<input type="hidden" id="c-media-barcode" required>' +
-        '</div>' +
-        '<div class="form-group">' +
-        '<label for="c-days">Loan Period (days)</label>' +
-        '<input type="number" id="c-days" value="21" min="1" max="90">' +
-        '</div>' +
-        '<button type="submit" class="btn btn-success">Checkout</button>' +
-        '</form>'
-    );
-
-    // Set up typeahead search for borrower
-    setupBorrowerAutocomplete();
-
-    // Set up typeahead search for media
-    setupMediaAutocomplete();
-  }
-
   var borrowerSearchTimeout = null;
 
-  function setupBorrowerAutocomplete() {
-    var input = document.getElementById('c-borrower-search');
+  // ============================================================================
+  // CIRCULATION DESK
+  // ============================================================================
+
+  function showCheckoutSession() {
+    var content =
+      '<div class="form-group">' +
+      '<label>Member *</label>' +
+      '<input type="text" id="co-member-search" placeholder="Type 2+ characters to search by name or email..." autocomplete="off" title="Type at least 2 characters to search for a member">' +
+      '<div id="co-member-results" class="autocomplete-results"></div>' +
+      '<input type="hidden" id="co-member-id">' +
+      '<input type="hidden" id="co-member-name">' +
+      '<div id="co-error" style="display:none;margin-top:6px;color:#991b1b;font-size:13px"></div>' +
+      '</div>' +
+      '<div class="form-group">' +
+      '<label for="co-days">Loan Period (days)</label>' +
+      '<input type="number" id="co-days" value="21" min="1" max="90" title="Number of days before the resource is due back (default: 21)">' +
+      '</div>' +
+      '<div class="form-group">' +
+      '<label for="co-barcode">Barcode — scan or type then press Enter</label>' +
+      '<input type="text" id="co-barcode" placeholder="Scan barcode..." autocomplete="off" style="font-size:16px;font-weight:600" title="Scan or type a barcode, then press Enter to check out">' +
+      '</div>' +
+      '<div id="co-items-section" style="display:none;margin-top:16px">' +
+      '<p style="font-size:13px;font-weight:600;color:#374151;margin-bottom:8px">Checked Out This Session</p>' +
+      '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead>' +
+      '<tr style="background:#f9fafb">' +
+      '<th style="padding:6px 8px;text-align:left;border-bottom:1px solid #e5e7eb">Title</th>' +
+      '<th style="padding:6px 8px;text-align:left;border-bottom:1px solid #e5e7eb">Barcode</th>' +
+      '</tr></thead><tbody id="co-items-tbody"></tbody></table>' +
+      '</div>' +
+      '<div style="margin-top:20px">' +
+      '<button class="btn btn-secondary" onclick="closeModal()">Close Session</button>' +
+      '</div>';
+
+    showModal('Checkout', content);
+    document.getElementById('modal-content').style.maxWidth = '640px';
+
+    setupCirculationMemberAutocomplete();
+
+    document.getElementById('co-barcode').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        processCirculationCheckout();
+      }
+    });
+  }
+
+  function setupCirculationMemberAutocomplete() {
+    var input = document.getElementById('co-member-search');
     input.addEventListener('input', function () {
       var query = input.value.trim();
-      document.getElementById('c-borrower').value = '';
-
+      document.getElementById('co-member-id').value = '';
       clearTimeout(borrowerSearchTimeout);
       if (query.length < 2) {
-        document.getElementById('c-borrower-results').innerHTML = '';
+        document.getElementById('co-member-results').innerHTML = '';
         return;
       }
-
       borrowerSearchTimeout = setTimeout(function () {
-        document.getElementById('c-borrower-results').innerHTML =
+        document.getElementById('co-member-results').innerHTML =
           '<div class="autocomplete-item loading">Searching...</div>';
-
         google.script.run
           .withSuccessHandler(function (results) {
-            var container = document.getElementById('c-borrower-results');
+            var container = document.getElementById('co-member-results');
+            if (!container) return;
             if (!results || results.length === 0) {
               container.innerHTML = '<div class="autocomplete-item">No matches found</div>';
               return;
             }
             container.innerHTML = results.slice(0, 20).map(function (b) {
-              return '<div class="autocomplete-item" onclick="selectBorrower(\'' +
-                escapeAttr(b.id) + '\', \'' +
-                escapeAttr(b.name) + '\', \'' +
-                escapeAttr(b.email) + '\')">' +
-                escapeHtml(b.name) + ' <span class="author">(' +
-                escapeHtml(b.email) + ')</span></div>';
+              return '<div class="autocomplete-item" onclick="selectCirculationMember(\'' +
+                escapeAttr(b.id) + '\',\'' + escapeAttr(b.name) + '\',\'' + escapeAttr(b.email) + '\')">' +
+                escapeHtml(b.name) + ' <span class="author">(' + escapeHtml(b.email) + ')</span></div>';
             }).join('');
           })
           .withFailureHandler(function () {
-            document.getElementById('c-borrower-results').innerHTML =
-              '<div class="autocomplete-item">Search failed — try again</div>';
+            var container = document.getElementById('co-member-results');
+            if (container) container.innerHTML = '<div class="autocomplete-item">Search failed — try again</div>';
           })
           .searchBorrowers(query);
       }, 300);
     });
   }
 
-  function selectBorrower(id, name, email) {
-    document.getElementById('c-borrower').value = id;
-    document.getElementById('c-borrower-name').value = name;
-    document.getElementById('c-borrower-search').value = name + ' (' + email + ')';
-    document.getElementById('c-borrower-results').innerHTML = '';
+  function selectCirculationMember(id, name, email) {
+    document.getElementById('co-member-id').value = id;
+    document.getElementById('co-member-name').value = name;
+    document.getElementById('co-member-search').value = name + ' (' + email + ')';
+    document.getElementById('co-member-results').innerHTML = '';
+    document.getElementById('co-barcode').focus();
   }
 
-  var mediaSearchTimeout = null;
+  function processCirculationCheckout() {
+    var borrowerId = document.getElementById('co-member-id').value;
+    var borrowerName = document.getElementById('co-member-name').value;
+    var barcodeField = document.getElementById('co-barcode');
+    var barcode = barcodeField.value.trim();
+    var days = parseInt(document.getElementById('co-days').value) || 21;
 
-  function setupMediaAutocomplete() {
-    var input = document.getElementById('c-media-search');
-    input.addEventListener('input', function () {
-      var query = input.value.trim();
-      document.getElementById('c-media').value = '';
-
-      clearTimeout(mediaSearchTimeout);
-      if (query.length < 2) {
-        document.getElementById('c-media-results').innerHTML = '';
-        return;
+    if (!borrowerId) {
+      var errEl = document.getElementById('co-error');
+      if (errEl) {
+        errEl.textContent = 'Please select a member first.';
+        errEl.style.display = 'block';
       }
+      barcodeField.value = '';
+      document.getElementById('co-member-search').focus();
+      return;
+    }
+    var errEl = document.getElementById('co-error');
+    if (errEl) errEl.style.display = 'none';
+    if (!barcode) return;
 
-      mediaSearchTimeout = setTimeout(function () {
-        document.getElementById('c-media-results').innerHTML =
-          '<div class="autocomplete-item loading">Searching...</div>';
+    barcodeField.disabled = true;
 
-        google.script.run
-          .withSuccessHandler(function (results) {
-            console.log(results.slice(0, 5))
-            var container = document.getElementById('c-media-results');
-            if (!results || results.length === 0) {
-              container.innerHTML = '<div class="autocomplete-item">No matches found</div>';
-              return;
-            }
-            container.innerHTML = results.slice(0, 20).map(function (m) {
-              return '<div class="autocomplete-item" onclick="selectMedia(\'' +
-                escapeAttr(m.id) + '\', \'' +
-                escapeAttr(m.barcode) + '\', \'' +
-                escapeAttr(m.title) + '\')">' +
-                escapeAttr(m.barcode) + ' | ' + escapeHtml(m.title) + '</div>';
-            }).join('');
-          })
-          .withFailureHandler(function () {
-            document.getElementById('c-media-results').innerHTML =
-              '<div class="autocomplete-item">Search failed — try again</div>';
-          })
-          .searchMedia(query);
-      }, 300);
+    google.script.run
+      .withSuccessHandler(function (result) {
+        barcodeField.disabled = false;
+        barcodeField.value = '';
+        barcodeField.focus();
+        var errEl = document.getElementById('co-error');
+        if (errEl) errEl.style.display = 'none';
+        if (result.success) {
+          var section = document.getElementById('co-items-section');
+          var tbody = document.getElementById('co-items-tbody');
+          section.style.display = 'block';
+          tbody.innerHTML +=
+            '<tr>' +
+            '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6">' + escapeHtml(result.title) + '</td>' +
+            '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6">' + escapeHtml(barcode) + '</td>' +
+            '</tr>';
+        } else {
+          var errEl = document.getElementById('co-error');
+          if (errEl) {
+            errEl.textContent = result.error || 'Checkout failed';
+            errEl.style.display = 'block';
+          }
+        }
+      })
+      .withFailureHandler(function (error) {
+        barcodeField.disabled = false;
+        barcodeField.value = '';
+        barcodeField.focus();
+        handleError(error);
+      })
+      .checkoutByBarcode(borrowerId, barcode, borrowerName, days);
+  }
+
+  function showReturnSession() {
+    var content =
+      '<div class="form-group">' +
+      '<label for="ret-barcode">Barcode — scan or type then press Enter</label>' +
+      '<input type="text" id="ret-barcode" placeholder="Scan barcode..." autocomplete="off" style="font-size:16px;font-weight:600" title="Scan or type a barcode, then press Enter to return it">' +
+      '</div>' +
+      '<div id="ret-items-section" style="display:none;margin-top:16px">' +
+      '<p style="font-size:13px;font-weight:600;color:#374151;margin-bottom:8px">Returned This Session</p>' +
+      '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead>' +
+      '<tr style="background:#f9fafb">' +
+      '<th style="padding:6px 8px;text-align:left;border-bottom:1px solid #e5e7eb">Title</th>' +
+      '<th style="padding:6px 8px;text-align:left;border-bottom:1px solid #e5e7eb">Member</th>' +
+      '<th style="padding:6px 8px;text-align:left;border-bottom:1px solid #e5e7eb">Barcode</th>' +
+      '</tr></thead><tbody id="ret-items-tbody"></tbody></table>' +
+      '</div>' +
+      '<div style="margin-top:20px">' +
+      '<button class="btn btn-secondary" onclick="closeModal()">Close Session</button>' +
+      '</div>';
+
+    showModal('Return', content);
+    document.getElementById('modal-content').style.maxWidth = '640px';
+
+    var barcodeField = document.getElementById('ret-barcode');
+    barcodeField.focus();
+    barcodeField.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        processCirculationReturn();
+      }
     });
   }
 
-  function selectMedia(id, barcode, title) {
-    document.getElementById('c-media').value = id;
-    document.getElementById('c-media-name').value = title;
-    document.getElementById('c-media-barcode').value = barcode;
-    document.getElementById('c-media-search').value = `${barcode} | ${title}`;
-    document.getElementById('c-media-results').innerHTML = '';
-  }
+  function processCirculationReturn() {
+    var barcodeField = document.getElementById('ret-barcode');
+    var barcode = barcodeField.value.trim();
+    if (!barcode) return;
 
-  function submitCheckout(event) {
-    event.preventDefault();
-    showStatus('Processing checkout...', 'loading');
-
-    var borrowerId = document.getElementById('c-borrower').value;
-    var borrowerName = document.getElementById('c-borrower-name').value;
-    var barcode = document.getElementById('c-media-barcode').value;
-    var title = document.getElementById('c-media-name').value;
-    var days = parseInt(document.getElementById('c-days').value) || 14;
-    var resourceId = document.getElementById('c-media').value;
+    barcodeField.disabled = true;
 
     google.script.run
       .withSuccessHandler(function (result) {
+        barcodeField.disabled = false;
+        barcodeField.value = '';
+        barcodeField.focus();
         if (result.success) {
-          showStatus('Checkout complete!', 'success');
-          closeModal();
-          loadLoans();
-          loadMedia(); // Refresh media to update availability
-        } else {
-          showStatus(result.error || 'Checkout failed', 'error');
-        }
-      })
-      .withFailureHandler(handleError)
-      .processCheckout(borrowerId, barcode, resourceId, title, borrowerName, days);
-  }
-
-  function returnLoan(id) {
-    showModal(
-      'Return Item',
-      '<p>Mark this item as returned?</p>' +
-        '<div style="display:flex;gap:8px;margin-top:16px">' +
-        '<button class="btn btn-success" onclick="confirmReturn(\'' + id + '\')">Confirm Return</button>' +
-        '<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>' +
-        '</div>'
-    );
-  }
-
-  function confirmReturn(id) {
-    closeModal();
-    showStatus('Processing return...', 'loading');
-    google.script.run
-      .withSuccessHandler(function (result) {
-        if (result.success) {
-          showStatus('Return processed!', 'success');
-          loadLoans();
-          loadMedia();
+          var section = document.getElementById('ret-items-section');
+          var tbody = document.getElementById('ret-items-tbody');
+          section.style.display = 'block';
+          tbody.innerHTML +=
+            '<tr>' +
+            '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6">' + escapeHtml(result.title) + '</td>' +
+            '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6">' + escapeHtml(result.borrowerName) + '</td>' +
+            '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6">' + escapeHtml(barcode) + '</td>' +
+            '</tr>';
         } else {
           showStatus(result.error || 'Return failed', 'error');
         }
       })
-      .withFailureHandler(handleError)
-      .returnLoanById(id);
+      .withFailureHandler(function (error) {
+        barcodeField.disabled = false;
+        barcodeField.value = '';
+        barcodeField.focus();
+        handleError(error);
+      })
+      .returnLoanByBarcode(barcode);
   }
 
-  function extendLoan(id) {
-    showModal(
-      'Extend Loan',
-      '<form id="extend-form" onsubmit="submitExtendLoan(event, \'' + id + '\')">' +
-        '<div class="form-group">' +
-        '<label for="extend-days">Extend by how many days?</label>' +
-        '<input type="number" id="extend-days" value="21" min="1" max="90" required>' +
-        '</div>' +
-        '<button type="submit" class="btn btn-primary">Extend</button>' +
-        '</form>'
-    );
+  function showExtendSession() {
+    var content =
+      '<div class="form-group">' +
+      '<label for="ext-days">Extend by (days)</label>' +
+      '<input type="number" id="ext-days" value="21" min="1" max="90" title="Number of additional days to add to the current due date">' +
+      '</div>' +
+      '<div class="form-group">' +
+      '<label for="ext-barcode">Barcode — scan or type then press Enter</label>' +
+      '<input type="text" id="ext-barcode" placeholder="Scan barcode..." autocomplete="off" style="font-size:16px;font-weight:600" title="Scan or type a barcode, then press Enter to extend it">' +
+      '</div>' +
+      '<div id="ext-items-section" style="display:none;margin-top:16px">' +
+      '<p style="font-size:13px;font-weight:600;color:#374151;margin-bottom:8px">Extended This Session</p>' +
+      '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead>' +
+      '<tr style="background:#f9fafb">' +
+      '<th style="padding:6px 8px;text-align:left;border-bottom:1px solid #e5e7eb">Title</th>' +
+      '<th style="padding:6px 8px;text-align:left;border-bottom:1px solid #e5e7eb">Barcode</th>' +
+      '<th style="padding:6px 8px;text-align:left;border-bottom:1px solid #e5e7eb">New Due Date</th>' +
+      '</tr></thead><tbody id="ext-items-tbody"></tbody></table>' +
+      '</div>' +
+      '<div style="margin-top:20px">' +
+      '<button class="btn btn-secondary" onclick="closeModal()">Close Session</button>' +
+      '</div>';
+
+    showModal('Extend', content);
+    document.getElementById('modal-content').style.maxWidth = '640px';
+
+    var barcodeField = document.getElementById('ext-barcode');
+    barcodeField.focus();
+    barcodeField.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        processCirculationExtend();
+      }
+    });
   }
 
-  function submitExtendLoan(event, id) {
-    event.preventDefault();
-    var daysNum = parseInt(document.getElementById('extend-days').value);
-    if (isNaN(daysNum) || daysNum < 1) {
-      showStatus('Please enter a valid number of days', 'error');
-      return;
-    }
-    closeModal();
-    showStatus('Extending loan...', 'loading');
+  function processCirculationExtend() {
+    var barcodeField = document.getElementById('ext-barcode');
+    var barcode = barcodeField.value.trim();
+    var days = parseInt(document.getElementById('ext-days').value) || 21;
+    if (!barcode) return;
+
+    barcodeField.disabled = true;
+
     google.script.run
       .withSuccessHandler(function (result) {
+        barcodeField.disabled = false;
+        barcodeField.value = '';
+        barcodeField.focus();
         if (result.success) {
-          showStatus('Loan extended!', 'success');
-          loadLoans();
+          var section = document.getElementById('ext-items-section');
+          var tbody = document.getElementById('ext-items-tbody');
+          section.style.display = 'block';
+          tbody.innerHTML +=
+            '<tr>' +
+            '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6">' + escapeHtml(result.title) + '</td>' +
+            '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6">' + escapeHtml(barcode) + '</td>' +
+            '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6">' + escapeHtml(result.newDueDate) + '</td>' +
+            '</tr>';
         } else {
           showStatus(result.error || 'Extension failed', 'error');
         }
       })
-      .withFailureHandler(handleError)
-      .extendLoan(id, daysNum);
+      .withFailureHandler(function (error) {
+        barcodeField.disabled = false;
+        barcodeField.value = '';
+        barcodeField.focus();
+        handleError(error);
+      })
+      .extendLoanByBarcode(barcode, days);
   }
 
   // ============================================================================

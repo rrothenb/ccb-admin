@@ -139,19 +139,6 @@ class LoanService extends BaseEntityService<Loan> {
   }
 
   /**
-   * Gets active loans for a specific borrower
-   */
-  getActiveLoansByBorrower(borrowerId: string): OperationResult<Loan[]> {
-    const result = this.getLoansByBorrower(borrowerId);
-    if (!result.success || !result.data) {
-      return result;
-    }
-
-    const active = result.data.filter((l) => l.status === 'active');
-    return { success: true, data: active };
-  }
-
-  /**
    * Gets the current loan for a media item (if any)
    */
   getCurrentLoanForMedia(barcode: string): OperationResult<Loan | null> {
@@ -161,7 +148,7 @@ class LoanService extends BaseEntityService<Loan> {
     }
 
     const activeLoan = result.data.find(
-      (l) => l.barcode === barcode && l.status === 'active'
+      (l) => l.barcode === barcode
     );
 
     return { success: true, data: activeLoan || null };

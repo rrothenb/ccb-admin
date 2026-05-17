@@ -28,17 +28,9 @@ export interface Media {
   title: string;
   author: string;
   type: string;
-  isbn: string;
-  notes: string;
-  genres: string;
-  date: string;
-  abstract: string;
-  subjects: string;
-  description: string;
-  publisher: string;
-  place: string;
   classification: string;
   barcodes: string;
+  resourceBox: string;
 }
 
 /** A loan record */
@@ -60,7 +52,7 @@ export const BORROWER_COLUMNS: (keyof Borrower)[] = [
   'id', 'name', 'email', 'phone', 'gender', 'address', 'postcode', 'borrowerType', 'expiryDate', 'memberSince'
 ];
 export const MEDIA_COLUMNS: (keyof Media)[] = [
-  'id', 'title', 'author', 'type', 'isbn', 'notes', 'genres', 'date', 'abstract',	'subjects', 'description', 'publisher', 'place', 'classification', 'barcodes'
+  'id', 'title', 'author', 'type', 'classification', 'barcodes', 'resourceBox'
 ];
 
 export const LOAN_COLUMNS: (keyof Loan)[] = [

@@ -261,6 +261,46 @@
         width: auto;
       }
 
+      /* Tooltips */
+      [data-tooltip] {
+        position: relative;
+      }
+      [data-tooltip]::after {
+        content: attr(data-tooltip);
+        position: absolute;
+        bottom: calc(100% + 8px);
+        left: 50%;
+        transform: translateX(-50%);
+        background: #1f2937;
+        color: white;
+        padding: 6px 10px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 400;
+        white-space: nowrap;
+        z-index: 9999;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+      }
+      [data-tooltip]::before {
+        content: '';
+        position: absolute;
+        bottom: calc(100% + 4px);
+        left: 50%;
+        transform: translateX(-50%);
+        border: 4px solid transparent;
+        border-top-color: #1f2937;
+        z-index: 9999;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+      }
+      [data-tooltip]:hover::after,
+      [data-tooltip]:hover::before {
+        opacity: 1;
+      }
+
       /* Responsive adjustments */
       @media (max-width: 600px) {
         .app-container {
@@ -292,28 +332,52 @@
 
       <!-- Tab Navigation -->
       <nav class="tab-nav">
-        <button class="tab-btn active" data-tab="borrowers" onclick="switchTab('Borrowers')">
-          Borrowers
+        <button class="tab-btn active" data-tab="circulation" onclick="switchTab('Circulation')"
+                data-tooltip="Check out, return, or extend resources">
+          Circulation Desk
         </button>
-        <button class="tab-btn" data-tab="media" onclick="switchTab('Media')">
-          Media
+        <button class="tab-btn" data-tab="borrowers" onclick="switchTab('Borrowers')"
+                data-tooltip="View and manage library members">
+          Members
         </button>
-        <button class="tab-btn" data-tab="loans" onclick="switchTab('Loans')">
+        <button class="tab-btn" data-tab="media" onclick="switchTab('Media')"
+                data-tooltip="Search and manage the resource catalog">
+          Resources
+        </button>
+        <button class="tab-btn" data-tab="loans" onclick="switchTab('Loans')"
+                data-tooltip="View all currently active loans">
           Loans
         </button>
       </nav>
 
-      <!-- Borrowers Tab -->
-      <div id="borrowers-tab" class="tab-content active">
+      <!-- Circulation Desk Tab -->
+      <div id="circulation-tab" class="tab-content active">
+        <div class="actions-grid" style="margin-top: 16px;">
+          <button class="btn btn-success" style="width: 160px; padding: 24px 16px; font-size: 16px; text-align: center;" onclick="showCheckoutSession()"
+                  data-tooltip="Select a member, then scan barcodes to check out resources">Checkout</button>
+          <button class="btn btn-secondary" style="width: 160px; padding: 24px 16px; font-size: 16px; text-align: center;" onclick="showReturnSession()"
+                  data-tooltip="Scan barcodes to process returns">Return</button>
+          <button class="btn btn-secondary" style="width: 160px; padding: 24px 16px; font-size: 16px; text-align: center;" onclick="showExtendSession()"
+                  data-tooltip="Scan barcodes to extend due dates">Extend</button>
+        </div>
+      </div>
+
+      <!-- Members Tab -->
+      <div id="borrowers-tab" class="tab-content">
         <div class="actions-grid">
-          <button class="btn btn-primary" onclick="showAddBorrowerModal()">+ Add Borrower</button>
-          <button class="btn btn-secondary" onclick="refreshCurrentTab()">Refresh</button>
+          <button class="btn btn-primary" onclick="showAddBorrowerModal()"
+                  data-tooltip="Register a new library member">+ Add Member</button>
+          <button class="btn btn-secondary" onclick="refreshCurrentTab()"
+                  data-tooltip="Reload the members list">Refresh</button>
         </div>
         <div class="search-box">
-          <input type="text" id="borrower-search" placeholder="Search by name or email..." 
+          <input type="text" id="borrower-search" placeholder="Search members by name or email..."
+                 title="Search by name or email address"
                  onkeypress="if(event.key==='Enter') searchBorrowersUI()">
-          <button class="btn btn-secondary" onclick="searchBorrowersUI()">Search</button>
-          <button class="btn btn-secondary" onclick="clearBorrowerSearch()">Clear</button>
+          <button class="btn btn-secondary" onclick="searchBorrowersUI()"
+                  data-tooltip="Search members">Search</button>
+          <button class="btn btn-secondary" onclick="clearBorrowerSearch()"
+                  data-tooltip="Clear search and show all members">Clear</button>
         </div>
         <div class="data-section">
           <table class="data-table" id="borrowers-table">
@@ -332,17 +396,22 @@
         </div>
       </div>
 
-      <!-- Media Tab -->
+      <!-- Resources Tab -->
       <div id="media-tab" class="tab-content">
         <div class="actions-grid">
-          <button class="btn btn-primary" onclick="showAddMediaModal()">+ Add Media</button>
-          <button class="btn btn-secondary" onclick="refreshCurrentTab()">Refresh</button>
+          <button class="btn btn-primary" onclick="showAddMediaModal()"
+                  data-tooltip="Add a new resource to the catalog">+ Add Resource</button>
+          <button class="btn btn-secondary" onclick="refreshCurrentTab()"
+                  data-tooltip="Reset the resources view">Refresh</button>
         </div>
         <div class="search-box">
-          <input type="text" id="media-search" placeholder="Search by title, author, place, abstract, notes, subjects, description, or barcode..."
+          <input type="text" id="media-search" placeholder="Search resources by title, author, barcode, or more..."
+                 title="Search by title, author, barcode, subjects, and more"
                  onkeypress="if(event.key==='Enter') searchMediaUI()">
-          <button class="btn btn-secondary" onclick="searchMediaUI()">Search</button>
-          <button class="btn btn-secondary" onclick="clearMediaSearch()">Clear</button>
+          <button class="btn btn-secondary" onclick="searchMediaUI()"
+                  data-tooltip="Search resources">Search</button>
+          <button class="btn btn-secondary" onclick="clearMediaSearch()"
+                  data-tooltip="Clear search results">Clear</button>
         </div>
         <div class="data-section">
           <table class="data-table" id="media-table">
@@ -365,23 +434,24 @@
       <!-- Loans Tab -->
       <div id="loans-tab" class="tab-content">
         <div class="actions-grid">
-          <button class="btn btn-success" onclick="showCheckoutModal()">+ New Checkout</button>
-          <button class="btn btn-secondary" onclick="refreshCurrentTab()">Refresh</button>
-          <button class="btn btn-secondary" onclick="showOverdueOnly()">Show Overdue</button>
-          <button class="btn btn-secondary" onclick="showAllLoans()">Show All Active</button>
+          <button class="btn btn-secondary" onclick="refreshCurrentTab()"
+                  data-tooltip="Reload the active loans list">Refresh</button>
+          <button class="btn btn-secondary" onclick="showOverdueOnly()"
+                  data-tooltip="Show only loans past their due date">Show Overdue</button>
+          <button class="btn btn-secondary" onclick="showAllLoans()"
+                  data-tooltip="Show all currently active loans">Show All Active</button>
         </div>
         <div class="data-section">
           <table class="data-table" id="loans-table">
             <thead>
               <tr>
-                <th>Borrower Name</th>
-                <th>Borrower ID</th>
-                <th>Media Name</th>
-                <th>Media Barcode</th>
+                <th>Member Name</th>
+                <th>Member ID</th>
+                <th>Resource Name</th>
+                <th>Barcode</th>
                 <th>Checkout Date</th>
                 <th>Due Date</th>
                 <th>Status</th>
-                <th>Actions</th>
               </tr>
             </thead>
             <tbody id="loans-tbody">

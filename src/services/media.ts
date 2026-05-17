@@ -21,21 +21,12 @@ class MediaService extends BaseEntityService<Media> {
     title: string,
     author: string = '',
     type: string = '',
-    isbn: string = '',
-    notes: string = '',
-    genres: string = '',
-    date: string = '',
-    abstract: string = '',
-    subjects: string = '',
-    description: string = '',
-    publisher: string = '',
-    place: string = '',
     classification: string = '',
-    barcodes: string = ''
+    barcodes: string = '',
+    resourceBox: string = ''
   ): OperationResult<Media> {
     return this.create({
-      title, author, type, isbn, notes, genres, date, abstract,
-      subjects, description, publisher, place, classification, barcodes,
+      title, author, type, classification, barcodes, resourceBox,
     });
   }
 
@@ -82,11 +73,9 @@ class MediaService extends BaseEntityService<Media> {
       (m) =>
         `${m.resource.title}`.toLowerCase().includes(lowerQuery) ||
         `${m.resource.author}`.toLowerCase().includes(lowerQuery) ||
-        `${m.resource.place}`.toLowerCase().includes(lowerQuery) ||
-        `${m.resource.abstract}`.toLowerCase().includes(lowerQuery) ||
-        `${m.resource.notes}`.toLowerCase().includes(lowerQuery) ||
-        `${m.resource.subjects}`.toLowerCase().includes(lowerQuery) ||
-        `${m.resource.description}`.toLowerCase().includes(lowerQuery) ||
+        `${m.resource.type}`.toLowerCase().includes(lowerQuery) ||
+        `${m.resource.classification}`.toLowerCase().includes(lowerQuery) ||
+        `${m.resource.resourceBox}`.toLowerCase().includes(lowerQuery) ||
         `${m.barcode}`.toLowerCase().includes(lowerQuery)
     ).map(m => ({
       id: m.resource.id,
@@ -110,7 +99,37 @@ class MediaService extends BaseEntityService<Media> {
     return { success: true, data: filtered };
   }
 
+  /**
+   * One-shot migration: inserts an `id` column as column A (if missing)
+   * and generates IDs for each existing data row.
+   */
+  backfillIds(): OperationResult<{ rowsUpdated: number }> {
+    const sheet = this.getMasterSheet();
+    if (!sheet) {
+      return { success: false, error: 'Could not access Media master spreadsheet. Run Setup first.' };
+    }
 
+    const data = sheet.getDataRange().getValues();
+    if (data.length === 0) {
+      return { success: false, error: 'Sheet is empty — add headers first.' };
+    }
+
+    const firstHeader = String(data[0][0] ?? '').trim();
+    if (firstHeader === 'id') {
+      return { success: true, data: { rowsUpdated: 0 } };
+    }
+
+    sheet.insertColumnBefore(1);
+    sheet.getRange(1, 1).setValue('id');
+
+    const dataRowCount = data.length - 1;
+    if (dataRowCount > 0) {
+      const ids = Array.from({ length: dataRowCount }, () => [this.generateId()]);
+      sheet.getRange(2, 1, dataRowCount, 1).setValues(ids);
+    }
+
+    return { success: true, data: { rowsUpdated: dataRowCount } };
+  }
 }
 
 // Singleton instance

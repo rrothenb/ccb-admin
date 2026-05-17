@@ -79,6 +79,20 @@ function clearConfig(): void {
 // ============================================================================
 
 /**
+ * One-shot migration: adds an `id` column to the Media sheet and backfills
+ * IDs for existing rows. Safe to re-run — does nothing if `id` is already
+ * the first column. Run this from the Apps Script editor.
+ */
+function backfillMediaIds(): void {
+  const result = getMediaService().backfillIds();
+  if (result.success) {
+    Logger.log(`Backfill complete. Rows updated: ${result.data?.rowsUpdated ?? 0}`);
+  } else {
+    Logger.log(`Backfill failed: ${result.error}`);
+  }
+}
+
+/**
  * Initializes headers on all master sheets
  */
 function initializeAllHeaders(): void {
@@ -242,6 +256,47 @@ function searchMedia(query: string): unknown[] {
 }
 
 /**
+ * Searches all media and returns full objects with availability status (for Resources tab display)
+ */
+function searchAllMedia(query: string): unknown[] {
+  const user = Session.getActiveUser().getEmail();
+  Logger.log(`[AUDIT] ${user} searched all media: "${query}"`);
+
+  const mediaService = getMediaService();
+  const result = mediaService.getAll();
+  const data = result.success && result.data ? result.data : [];
+
+  const loanService = getLoanService();
+  const loanResult = loanService.getAll();
+  const loanedBarcodes = (loanResult.success && loanResult.data ? loanResult.data : []).map(l => l.barcode);
+
+  const lowerQuery = query.toLowerCase();
+
+  return data
+    .filter(item => item.barcodes)
+    .filter(item =>
+      `${item.title}`.toLowerCase().includes(lowerQuery) ||
+      `${item.author}`.toLowerCase().includes(lowerQuery) ||
+      `${item.type}`.toLowerCase().includes(lowerQuery) ||
+      `${item.classification}`.toLowerCase().includes(lowerQuery) ||
+      `${item.resourceBox}`.toLowerCase().includes(lowerQuery) ||
+      `${item.barcodes}`.toLowerCase().includes(lowerQuery)
+    )
+    .map(item => {
+      const clean: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(item)) {
+        if (value !== '' && value !== null && value !== undefined) {
+          clean[key] = value;
+        }
+      }
+      clean.status = item.barcodes.split('|').some((b: string) => !loanedBarcodes.includes(b.trim()))
+        ? 'available'
+        : 'on-loan';
+      return clean;
+    });
+}
+
+/**
  * Saves a media item (create or update)
  */
 function saveMedia(mediaData: {
@@ -249,17 +304,9 @@ function saveMedia(mediaData: {
   title: string;
   author: string;
   type: string;
-  isbn: string;
-  notes: string;
-  genres: string;
-  date: string;
-  abstract: string;
-  subjects: string;
-  description: string;
-  publisher: string;
-  place: string;
   classification: string;
   barcodes: string;
+  resourceBox: string;
 }): { success: boolean; error?: string } {
   const user = Session.getActiveUser().getEmail();
 
@@ -269,17 +316,9 @@ function saveMedia(mediaData: {
     title: mediaData.title,
     author: mediaData.author,
     type: mediaData.type,
-    isbn: mediaData.isbn,
-    notes: mediaData.notes,
-    genres: mediaData.genres,
-    date: mediaData.date,
-    abstract: mediaData.abstract,
-    subjects: mediaData.subjects,
-    description: mediaData.description,
-    publisher: mediaData.publisher,
-    place: mediaData.place,
     classification: mediaData.classification,
     barcodes: mediaData.barcodes,
+    resourceBox: mediaData.resourceBox,
   };
 
   if (mediaData.id) {
@@ -290,10 +329,7 @@ function saveMedia(mediaData: {
     writeAuditLog(user, `created media: ${mediaData.title}`);
     const result = service.createMedia(
       mediaData.title, mediaData.author, mediaData.type,
-      mediaData.isbn, mediaData.notes, mediaData.genres,
-      mediaData.date, mediaData.abstract, mediaData.subjects,
-      mediaData.description, mediaData.publisher, mediaData.place,
-      mediaData.classification, mediaData.barcodes
+      mediaData.classification, mediaData.barcodes, mediaData.resourceBox
     );
     return { success: result.success, error: result.error };
   }
@@ -375,6 +411,95 @@ function extendLoan(loanId: string, days: number): { success: boolean; error?: s
   return { success: result.success, error: result.error };
 }
 
+/**
+ * Checks out a resource by barcode (for circulation desk barcode scanner workflow)
+ */
+function checkoutByBarcode(
+  borrowerId: string,
+  barcode: string,
+  borrowerName: string,
+  loanDays: number = 21
+): { success: boolean; title?: string; error?: string } {
+  const user = Session.getActiveUser().getEmail();
+
+  const mediaService = getMediaService();
+  const allMedia = mediaService.getAll();
+  if (!allMedia.success || !allMedia.data) {
+    return { success: false, error: 'Could not load resources' };
+  }
+
+  let foundMedia = null;
+  for (const item of allMedia.data) {
+    const barcodes = (item.barcodes || '').split('|').map((b: string) => b.trim());
+    if (barcodes.includes(barcode)) {
+      foundMedia = item;
+      break;
+    }
+  }
+
+  if (!foundMedia) {
+    return { success: false, error: `Barcode ${barcode} not found in catalog` };
+  }
+
+  const loanService = getLoanService();
+  const result = loanService.checkout(borrowerId, barcode, foundMedia.id, borrowerName, foundMedia.title, loanDays);
+  if (result.success) {
+    writeAuditLog(user, `checked out "${foundMedia.title}" (barcode=${barcode}) to ${borrowerName} (borrower=${borrowerId}) for ${loanDays} days`);
+    return { success: true, title: foundMedia.title };
+  }
+  return { success: false, error: result.error };
+}
+
+/**
+ * Returns a loan by barcode (for circulation desk barcode scanner workflow)
+ */
+function returnLoanByBarcode(barcode: string): { success: boolean; title?: string; borrowerName?: string; error?: string } {
+  const user = Session.getActiveUser().getEmail();
+
+  const service = getLoanService();
+  const allLoans = service.getAll();
+  if (!allLoans.success || !allLoans.data) {
+    return { success: false, error: 'Could not load loans' };
+  }
+
+  const loan = allLoans.data.find((l) => l.barcode === barcode);
+  if (!loan) {
+    return { success: false, error: `No active loan found for barcode ${barcode}` };
+  }
+
+  const returnResult = service.processReturn(loan.id);
+  if (returnResult.success) {
+    writeAuditLog(user, `returned "${loan.title}" (barcode=${barcode}) from ${loan.borrowerName}`);
+    return { success: true, title: loan.title, borrowerName: loan.borrowerName };
+  }
+  return { success: false, error: returnResult.error };
+}
+
+/**
+ * Extends a loan by barcode (for circulation desk barcode scanner workflow)
+ */
+function extendLoanByBarcode(barcode: string, days: number = 21): { success: boolean; title?: string; newDueDate?: string; error?: string } {
+  const user = Session.getActiveUser().getEmail();
+
+  const service = getLoanService();
+  const allLoans = service.getAll();
+  if (!allLoans.success || !allLoans.data) {
+    return { success: false, error: 'Could not load loans' };
+  }
+
+  const loan = allLoans.data.find((l) => l.barcode === barcode);
+  if (!loan) {
+    return { success: false, error: `No active loan found for barcode ${barcode}` };
+  }
+
+  const extendResult = service.extendLoan(loan.id, days);
+  if (extendResult.success) {
+    writeAuditLog(user, `extended "${loan.title}" (barcode=${barcode}) by ${days} days`);
+    return { success: true, title: loan.title, newDueDate: extendResult.data?.dueDate };
+  }
+  return { success: false, error: extendResult.error };
+}
+
 // ============================================================================
 // EXPOSE GLOBAL FUNCTIONS
 // ============================================================================
@@ -390,6 +515,7 @@ function extendLoan(loanId: string, days: number): { success: boolean; error?: s
 (globalThis as Record<string, unknown>).clearConfig = clearConfig;
 
 (globalThis as Record<string, unknown>).initializeAllHeaders = initializeAllHeaders;
+(globalThis as Record<string, unknown>).backfillMediaIds = backfillMediaIds;
 (globalThis as Record<string, unknown>).setAuditLogSpreadsheetId = setAuditLogSpreadsheetId;
 (globalThis as Record<string, unknown>).getAuditLogSpreadsheetId = getAuditLogSpreadsheetId;
 
@@ -403,6 +529,7 @@ function extendLoan(loanId: string, days: number): { success: boolean; error?: s
 (globalThis as Record<string, unknown>).getAllMedia = getAllMedia;
 (globalThis as Record<string, unknown>).getAvailableMedia = getAvailableMedia;
 (globalThis as Record<string, unknown>).searchMedia = searchMedia;
+(globalThis as Record<string, unknown>).searchAllMedia = searchAllMedia;
 (globalThis as Record<string, unknown>).saveMedia = saveMedia;
 
 // Loan functions
@@ -411,3 +538,6 @@ function extendLoan(loanId: string, days: number): { success: boolean; error?: s
 (globalThis as Record<string, unknown>).processCheckout = processCheckout;
 (globalThis as Record<string, unknown>).returnLoanById = returnLoanById;
 (globalThis as Record<string, unknown>).extendLoan = extendLoan;
+(globalThis as Record<string, unknown>).checkoutByBarcode = checkoutByBarcode;
+(globalThis as Record<string, unknown>).returnLoanByBarcode = returnLoanByBarcode;
+(globalThis as Record<string, unknown>).extendLoanByBarcode = extendLoanByBarcode;
