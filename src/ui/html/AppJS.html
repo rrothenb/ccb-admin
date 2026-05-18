@@ -7,6 +7,7 @@
   let allBorrowers = [];
   let allMedia = [];
   let allLoans = [];
+  let allBarcodes = [];
   let showingOverdueOnly = false;
 
   // ============================================================================
@@ -55,7 +56,7 @@
 
   function loadTabData(tabName) {
     if (tabName === 'Circulation') {
-      // Static tab — nothing to load
+      prewarmBarcodes();
     } else if (tabName === 'Borrowers') {
       loadBorrowers();
     } else if (tabName === 'Media') {
@@ -602,6 +603,53 @@
   // CIRCULATION DESK
   // ============================================================================
 
+  function prewarmBarcodes() {
+    var startedAt = Date.now();
+    console.log('[barcodes] requesting all barcodes from server...');
+    google.script.run
+      .withSuccessHandler(function (barcodes) {
+        allBarcodes = barcodes || [];
+        console.log('[barcodes] received ' + allBarcodes.length + ' barcodes in ' + (Date.now() - startedAt) + 'ms');
+      })
+      .withFailureHandler(function (err) {
+        console.warn('[barcodes] pre-warm failed after ' + (Date.now() - startedAt) + 'ms', err);
+        allBarcodes = [];
+      })
+      .getAllBarcodes();
+  }
+
+  function findUniqueBarcodeMatch(prefix) {
+    if (!prefix || !allBarcodes || !allBarcodes.length) return null;
+    var match = null;
+    for (var i = 0; i < allBarcodes.length; i++) {
+      var bc = allBarcodes[i];
+      if (bc.length >= prefix.length && bc.indexOf(prefix) === 0) {
+        if (match !== null) return null;
+        match = bc;
+      }
+    }
+    return match;
+  }
+
+  function attachBarcodeTypeahead(fieldId, submitFn) {
+    var field = document.getElementById(fieldId);
+    if (!field) return;
+    var timer = null;
+    field.addEventListener('input', function () {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(function () {
+        if (field.disabled) return;
+        var current = field.value.trim();
+        if (!current) return;
+        var match = findUniqueBarcodeMatch(current);
+        if (match) {
+          if (field.value !== match) field.value = match;
+          submitFn();
+        }
+      }, 200);
+    });
+  }
+
   function showCheckoutSession() {
     var content =
       '<div class="form-group">' +
@@ -643,6 +691,7 @@
         processCirculationCheckout();
       }
     });
+    attachBarcodeTypeahead('co-barcode', processCirculationCheckout);
   }
 
   function setupCirculationMemberAutocomplete() {
@@ -771,6 +820,7 @@
         processCirculationReturn();
       }
     });
+    attachBarcodeTypeahead('ret-barcode', processCirculationReturn);
   }
 
   function processCirculationReturn() {
@@ -842,6 +892,7 @@
         processCirculationExtend();
       }
     });
+    attachBarcodeTypeahead('ext-barcode', processCirculationExtend);
   }
 
   function processCirculationExtend() {

@@ -31,6 +31,24 @@ class MediaService extends BaseEntityService<Media> {
   }
 
   /**
+   * Gets a flat list of every barcode across all media items
+   */
+  getAllBarcodes(): OperationResult<string[]> {
+    const result = this.getAll();
+    if (!result.success || !result.data) {
+      return { ...result, data: [] };
+    }
+    const barcodes: string[] = [];
+    for (const resource of result.data) {
+      for (const barcode of `${resource.barcodes ?? ''}`.split('|')) {
+        const trimmed = barcode.trim();
+        if (trimmed) barcodes.push(trimmed);
+      }
+    }
+    return { success: true, data: barcodes };
+  }
+
+  /**
    * Gets all available media items
    */
   getAvailableMedia(): OperationResult<Media[]> {

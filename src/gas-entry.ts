@@ -258,6 +258,15 @@ function getAllMedia(): string {
   return Utilities.base64Encode(gzipped.getBytes());
 }
 /**
+ * Returns every barcode in the catalog (flat string array) for client-side prefix typeahead
+ */
+function getAllBarcodes(): string[] {
+  const service = getMediaService();
+  const result = service.getAllBarcodes();
+  return result.success && result.data ? result.data : [];
+}
+
+/**
  * Gets available media (not on loan)
  */
 function getAvailableMedia(): unknown[] {
@@ -588,6 +597,7 @@ function extendLoanByBarcode(barcode: string, days: number = 21): { success: boo
 
 // Media functions
 (globalThis as Record<string, unknown>).getAllMedia = getAllMedia;
+(globalThis as Record<string, unknown>).getAllBarcodes = getAllBarcodes;
 (globalThis as Record<string, unknown>).getAvailableMedia = getAvailableMedia;
 (globalThis as Record<string, unknown>).searchMedia = searchMedia;
 (globalThis as Record<string, unknown>).searchAllMedia = searchAllMedia;
