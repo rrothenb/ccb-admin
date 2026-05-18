@@ -11,6 +11,88 @@
   let showingOverdueOnly = false;
 
   // ============================================================================
+  // BUSY CURSOR — wraps google.script.run so the cursor signals pending work
+  // ============================================================================
+
+  (function instrumentGoogleScriptRun() {
+    var pending = 0;
+    var showTimer = null;
+
+    function start() {
+      pending++;
+      if (showTimer || document.body.classList.contains('busy')) return;
+      // Only show the wait cursor if the call is slow enough to notice (200ms),
+      // so quick calls don't cause a cursor flicker.
+      showTimer = setTimeout(function () {
+        showTimer = null;
+        if (pending > 0) document.body.classList.add('busy');
+      }, 200);
+    }
+
+    function stop() {
+      pending = Math.max(0, pending - 1);
+      if (pending > 0) return;
+      if (showTimer) {
+        clearTimeout(showTimer);
+        showTimer = null;
+      }
+      document.body.classList.remove('busy');
+    }
+
+    var realRun = google.script.run;
+
+    function wrap(opts) {
+      return new Proxy({}, {
+        get: function (_, prop) {
+          if (typeof prop !== 'string') return undefined;
+          if (prop === 'withSuccessHandler') {
+            return function (fn) {
+              return wrap(Object.assign({}, opts, { onSuccess: fn }));
+            };
+          }
+          if (prop === 'withFailureHandler') {
+            return function (fn) {
+              return wrap(Object.assign({}, opts, { onFailure: fn }));
+            };
+          }
+          if (prop === 'withUserObject' || prop === 'withLogger') {
+            return function () { return wrap(opts); };
+          }
+          // Terminal call — `prop` is the server function name.
+          return function () {
+            start();
+            var done = false;
+            function finish() {
+              if (done) return;
+              done = true;
+              stop();
+            }
+            // Safety net: a request that never returns shouldn't strand the cursor.
+            setTimeout(finish, 60000);
+
+            var args = arguments;
+            var rr = realRun
+              .withSuccessHandler(function () {
+                finish();
+                if (opts.onSuccess) opts.onSuccess.apply(null, arguments);
+              })
+              .withFailureHandler(function () {
+                finish();
+                if (opts.onFailure) opts.onFailure.apply(null, arguments);
+              });
+            return rr[prop].apply(rr, args);
+          };
+        }
+      });
+    }
+
+    Object.defineProperty(google.script, 'run', {
+      get: function () { return wrap({}); },
+      configurable: true
+    });
+  })();
+
+  // ============================================================================
   // INITIALIZATION
   // ============================================================================
 

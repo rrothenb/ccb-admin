@@ -246,6 +246,12 @@
         color: #6b7280;
       }
 
+      /* Busy cursor — applied to body when server requests are pending */
+      body.busy,
+      body.busy * {
+        cursor: wait !important;
+      }
+
       /* Search box */
       .search-box {
         display: flex;
