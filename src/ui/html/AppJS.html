@@ -15,6 +15,7 @@
   // BUSY CURSOR — wraps google.script.run so the cursor signals pending work
   // ============================================================================
 
+  var busyCursor;
   (function instrumentGoogleScriptRun() {
     var pending = 0;
     var showTimer = null;
@@ -40,6 +41,10 @@
       document.body.classList.remove('busy');
     }
 
+    // Exposed for callers that wait on a `.quiet()` request — they can drive
+    // the cursor manually once the user is actually blocked on the result.
+    busyCursor = { start: start, stop: stop };
+
     var realRun = google.script.run;
 
     function wrap(opts) {
@@ -59,14 +64,19 @@
           if (prop === 'withUserObject' || prop === 'withLogger') {
             return function () { return wrap(opts); };
           }
+          if (prop === 'quiet') {
+            // Opt out of the busy cursor for background prefetches.
+            return function () { return wrap(Object.assign({}, opts, { quiet: true })); };
+          }
           // Terminal call — `prop` is the server function name.
           return function () {
-            start();
+            var quiet = !!opts.quiet;
+            if (!quiet) start();
             var done = false;
             function finish() {
               if (done) return;
               done = true;
-              stop();
+              if (!quiet) stop();
             }
             // Safety net: a request that never returns shouldn't strand the cursor.
             setTimeout(finish, 60000);
@@ -691,19 +701,48 @@
   // CIRCULATION DESK
   // ============================================================================
 
+  // Barcode prewarm runs in the background — no busy cursor until a caller
+  // actually needs the list. State: 'idle' | 'loading' | 'ready'. Once 'ready',
+  // subsequent prewarm calls refresh the list in the background without
+  // flipping state, so the typeahead keeps using the cached data and never
+  // re-queues a busy-cursor wait.
+  var barcodesState = 'idle';
+  var barcodesInFlight = false;
+  var barcodesWaiters = [];
+
   function prewarmBarcodes() {
+    if (barcodesInFlight) return;
+    barcodesInFlight = true;
+    if (barcodesState === 'idle') barcodesState = 'loading';
     var startedAt = Date.now();
     console.log('[barcodes] requesting all barcodes from server...');
     google.script.run
       .withSuccessHandler(function (barcodes) {
         allBarcodes = barcodes || [];
         console.log('[barcodes] received ' + allBarcodes.length + ' barcodes in ' + (Date.now() - startedAt) + 'ms');
+        barcodesInFlight = false;
+        barcodesState = 'ready';
+        flushBarcodeWaiters();
       })
       .withFailureHandler(function (err) {
         console.warn('[barcodes] pre-warm failed after ' + (Date.now() - startedAt) + 'ms', err);
-        allBarcodes = [];
+        barcodesInFlight = false;
+        if (barcodesState === 'loading') {
+          allBarcodes = [];
+          barcodesState = 'ready';
+        }
+        flushBarcodeWaiters();
       })
+      .quiet()
       .getAllBarcodes();
+  }
+
+  function flushBarcodeWaiters() {
+    var waiters = barcodesWaiters;
+    barcodesWaiters = [];
+    waiters.forEach(function (fn) {
+      try { fn(); } catch (e) { console.error(e); }
+    });
   }
 
   function findUniqueBarcodeMatch(prefix) {
@@ -723,17 +762,38 @@
     var field = document.getElementById(fieldId);
     if (!field) return;
     var timer = null;
+    var waiterPending = false;
+
+    function tryMatch() {
+      if (field.disabled) return;
+      var current = field.value.trim();
+      if (!current) return;
+      var match = findUniqueBarcodeMatch(current);
+      if (match) {
+        if (field.value !== match) field.value = match;
+        submitFn();
+      }
+    }
+
     field.addEventListener('input', function () {
       if (timer) clearTimeout(timer);
       timer = setTimeout(function () {
         if (field.disabled) return;
-        var current = field.value.trim();
-        if (!current) return;
-        var match = findUniqueBarcodeMatch(current);
-        if (match) {
-          if (field.value !== match) field.value = match;
-          submitFn();
+        if (!field.value.trim()) return;
+        if (barcodesState !== 'ready') {
+          // User is actively waiting on us now — show the cursor until the
+          // prewarm finishes, then retry against the current field value.
+          if (waiterPending) return;
+          waiterPending = true;
+          busyCursor.start();
+          barcodesWaiters.push(function () {
+            waiterPending = false;
+            busyCursor.stop();
+            tryMatch();
+          });
+          return;
         }
+        tryMatch();
       }, 200);
     });
   }
