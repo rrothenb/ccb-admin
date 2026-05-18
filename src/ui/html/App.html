@@ -267,6 +267,11 @@
         width: auto;
       }
 
+      .search-box select {
+        width: auto;
+        min-width: 180px;
+      }
+
       /* Tooltips */
       [data-tooltip] {
         position: relative;
@@ -412,6 +417,11 @@
                   data-tooltip="Reset the resources view">Refresh</button>
         </div>
         <div class="search-box">
+          <select id="media-classification" onchange="searchMediaUI()"
+                  title="Show all resources with a given classification"
+                  data-tooltip="Browse all resources with a given classification">
+            <option value="">All classifications</option>
+          </select>
           <input type="text" id="media-search" placeholder="Search resources by title, author, barcode, or more..."
                  title="Search by title, author, barcode, subjects, and more"
                  onkeypress="if(event.key==='Enter') searchMediaUI()">

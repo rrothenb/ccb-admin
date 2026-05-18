@@ -7,6 +7,56 @@ import { BaseEntityService } from './base-service';
 import {getLoanService} from "./loans";
 
 /**
+ * Curated list of classifications exposed in the Resources tab dropdown.
+ * Case-insensitive match against the sheet's `classification` field, except
+ * "English Course" which matches any value that begins with "English Course".
+ * Edit this list to add or rename a classification.
+ */
+export const CLASSIFICATIONS: string[] = [
+  'Bilingual',
+  'BIOG',
+  'CD',
+  'CF',
+  'DET',
+  'Easy Reader Level 1',
+  'Easy Reader Level 2',
+  'Easy Reader Level 3',
+  'Easy Reader Level 4',
+  'Easy Reader Level 5',
+  'Easy Reader Level 6',
+  'Easy Reader Starter Level',
+  'ELT Magazine',
+  'ELT Magazine CD',
+  'ELT Resource CD',
+  'ELT Resource Folder',
+  'ELT Resource Magazine',
+  'English Course',
+  'FAN',
+  'Fiction Short stories',
+  'FSS',
+  'GEN',
+  'HF',
+  'HUM',
+  'JF',
+  'Kids',
+  'Literature',
+  'Magazine',
+  'RF',
+];
+
+/**
+ * Tests whether an item's classification value matches a selected dropdown entry.
+ * "English Course" is a prefix match; everything else is case-insensitive exact match.
+ */
+export function classificationMatches(itemClassification: string, selected: string): boolean {
+  const item = (itemClassification || '').trim().toLowerCase();
+  const sel = (selected || '').trim().toLowerCase();
+  if (!sel) return true;
+  if (sel === 'english course') return item.startsWith('english course');
+  return item === sel;
+}
+
+/**
  * Service for managing media items in the library system
  */
 class MediaService extends BaseEntityService<Media> {

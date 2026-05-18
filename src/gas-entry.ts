@@ -16,7 +16,7 @@ import {
 import { doGet, getAppContext, include } from './ui/webapp';
 
 import { getBorrowerService } from './services/borrowers';
-import { getMediaService } from './services/media';
+import { getMediaService, CLASSIFICATIONS, classificationMatches } from './services/media';
 import { getLoanService } from './services/loans';
 import { writeAuditLog, setAuditLogSpreadsheetId, getAuditLogSpreadsheetId } from './services/audit-log';
 import { Media } from './types';
@@ -282,11 +282,22 @@ function searchMedia(query: string): unknown[] {
 }
 
 /**
- * Searches all media and returns full objects with availability status (for Resources tab display)
+ * Returns the curated list of classifications shown in the Resources tab dropdown.
  */
-function searchAllMedia(query: string): unknown[] {
+function getClassifications(): string[] {
+  return CLASSIFICATIONS.slice();
+}
+
+/**
+ * Searches all media and returns full objects with availability status (for Resources tab display).
+ * Either `query` or `classification` may be empty; if both are empty the result is empty.
+ * When both are provided, the text query narrows within the selected classification.
+ */
+function searchAllMedia(query: string, classification: string = ''): unknown[] {
   const user = Session.getActiveUser().getEmail();
-  Logger.log(`[AUDIT] ${user} searched all media: "${query}"`);
+  Logger.log(`[AUDIT] ${user} searched all media: query="${query}" classification="${classification}"`);
+
+  if (!query && !classification) return [];
 
   const mediaService = getMediaService();
   const result = mediaService.getAll();
@@ -297,10 +308,14 @@ function searchAllMedia(query: string): unknown[] {
   const loanedBarcodes = (loanResult.success && loanResult.data ? loanResult.data : []).map(l => l.barcode);
 
   const lowerQuery = query.toLowerCase();
+  const hasQuery = !!query;
+  const hasClassification = !!classification;
 
   return data
     .filter(item => item.barcodes)
+    .filter(item => !hasClassification || classificationMatches(`${item.classification}`, classification))
     .filter(item =>
+      !hasQuery ||
       `${item.title}`.toLowerCase().includes(lowerQuery) ||
       `${item.author}`.toLowerCase().includes(lowerQuery) ||
       `${item.type}`.toLowerCase().includes(lowerQuery) ||
@@ -591,6 +606,7 @@ function extendLoanByBarcode(barcode: string, days: number = 21): { success: boo
 (globalThis as Record<string, unknown>).getAvailableMedia = getAvailableMedia;
 (globalThis as Record<string, unknown>).searchMedia = searchMedia;
 (globalThis as Record<string, unknown>).searchAllMedia = searchAllMedia;
+(globalThis as Record<string, unknown>).getClassifications = getClassifications;
 (globalThis as Record<string, unknown>).saveMedia = saveMedia;
 
 // Loan functions

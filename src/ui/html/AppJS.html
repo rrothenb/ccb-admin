@@ -115,7 +115,25 @@
       })
       .withFailureHandler(handleError)
       .getAppContext();
+    loadClassifications();
   });
+
+  function loadClassifications() {
+    google.script.run
+      .withSuccessHandler(function (classifications) {
+        var select = document.getElementById('media-classification');
+        if (!select || !classifications) return;
+        for (var i = 0; i < classifications.length; i++) {
+          var opt = document.createElement('option');
+          opt.value = classifications[i];
+          opt.textContent = classifications[i];
+          select.appendChild(opt);
+        }
+      })
+      .withFailureHandler(handleError)
+      .quiet()
+      .getClassifications();
+  }
 
   // ============================================================================
   // TAB SWITCHING
@@ -154,7 +172,7 @@
       showBorrowersEmptyState();
     } else if (tabName === 'Media') {
       document.getElementById('media-tbody').innerHTML =
-        '<tr><td colspan="5" class="empty-state">Enter a search term to find resources</td></tr>';
+        '<tr><td colspan="5" class="empty-state">Enter a search term or pick a classification to find resources</td></tr>';
     } else if (tabName === 'Loans') {
       loadLoans();
     }
@@ -302,9 +320,10 @@
 
   function searchMediaUI() {
     var query = document.getElementById('media-search').value.trim();
-    if (!query) {
+    var classification = document.getElementById('media-classification').value;
+    if (!query && !classification) {
       document.getElementById('media-tbody').innerHTML =
-        '<tr><td colspan="5" class="empty-state">Enter a search term to find resources</td></tr>';
+        '<tr><td colspan="5" class="empty-state">Enter a search term or pick a classification to find resources</td></tr>';
       return;
     }
     document.getElementById('media-tbody').innerHTML =
@@ -315,14 +334,15 @@
         renderMedia(allMedia);
       })
       .withFailureHandler(handleError)
-      .searchAllMedia(query);
+      .searchAllMedia(query, classification);
   }
 
   function clearMediaSearch() {
     document.getElementById('media-search').value = '';
+    document.getElementById('media-classification').value = '';
     allMedia = [];
     document.getElementById('media-tbody').innerHTML =
-      '<tr><td colspan="5" class="empty-state">Enter a search term to find resources</td></tr>';
+      '<tr><td colspan="5" class="empty-state">Enter a search term or pick a classification to find resources</td></tr>';
   }
 
   function showOverdueOnly() {
