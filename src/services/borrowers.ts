@@ -31,51 +31,33 @@ class BorrowerService extends BaseEntityService<Borrower> {
   }
 
   /**
-   * Gets all borrowers currently in good standing (expiryDate after today)
+   * Searches borrowers by name or email. Returns all matches (active and
+   * expired); each result is annotated with a `status` field of 'active' or
+   * 'expired' based on `expiryDate`.
    */
-  getActiveBorrowers(): OperationResult<Borrower[]> {
+  searchBorrowers(query: string): OperationResult<(Borrower & { status: 'active' | 'expired' })[]> {
     const result = this.getAll();
-    if (!result.success || !result.data) {
-      return result;
-    }
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const activeBorrowers = result.data.filter((b) => b.expiryDate && new Date(b.expiryDate) > today);
-    return { success: true, data: activeBorrowers };
-  }
-
-  /**
-   * Searches borrowers in good standing by name or email
-   */
-  searchBorrowers(query: string): OperationResult<Borrower[]> {
-    const result = this.getActiveBorrowers();
-    if (!result.success || !result.data) {
-      return result;
-    }
-
-    const lowerQuery = query.toLowerCase();
-    const matches = result.data.filter(
-      (b) =>
-        b.name.toLowerCase().includes(lowerQuery) ||
-        b.email.toLowerCase().includes(lowerQuery)
-    );
-
-    return { success: true, data: matches };
-  }
-
-  /**
-   * Checks if a borrower is in good standing (expiryDate after today)
-   */
-  isInGoodStanding(id: string): OperationResult<boolean> {
-    const result = this.getById(id);
     if (!result.success || !result.data) {
       return { success: false, error: result.error };
     }
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    return { success: true, data: !!result.data.expiryDate && new Date(result.data.expiryDate) > today };
+    const lowerQuery = query.toLowerCase();
+    const matches = result.data
+      .filter(
+        (b) =>
+          b.name.toLowerCase().includes(lowerQuery) ||
+          b.email.toLowerCase().includes(lowerQuery)
+      )
+      .map((b) => ({
+        ...b,
+        status: (b.expiryDate && new Date(b.expiryDate) > today)
+          ? ('active' as const)
+          : ('expired' as const),
+      }));
+
+    return { success: true, data: matches };
   }
 }
 

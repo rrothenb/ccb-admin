@@ -4,7 +4,6 @@
 
 import { Loan, LOAN_COLUMNS, OperationResult } from '../types';
 import { BaseEntityService } from './base-service';
-import { getBorrowerService } from './borrowers';
 
 /** Default loan period in days */
 const DEFAULT_LOAN_DAYS = 21;
@@ -18,8 +17,9 @@ class LoanService extends BaseEntityService<Loan> {
   }
 
   /**
-   * Creates a new loan (checkout)
-   * Validates that borrower is in good standing and media is available
+   * Creates a new loan (checkout). Membership-expiry is surfaced as a UI
+   * warning rather than blocked here, because staff routinely circulate to
+   * expired members.
    */
   checkout(
     borrowerId: string,
@@ -29,16 +29,6 @@ class LoanService extends BaseEntityService<Loan> {
     title: string,
     loanDays: number = DEFAULT_LOAN_DAYS
   ): OperationResult<Loan> {
-    // Validate borrower
-    const borrowerService = getBorrowerService();
-    const borrowerCheck = borrowerService.isInGoodStanding(borrowerId);
-    if (!borrowerCheck.success) {
-      return { success: false, error: borrowerCheck.error };
-    }
-    if (!borrowerCheck.data) {
-      return { success: false, error: 'Borrower is not in good standing' };
-    }
-
     // Check barcode is not already on loan
     const existingLoan = this.getCurrentLoanForMedia(barcode);
     if (!existingLoan.success) {

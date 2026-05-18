@@ -9,6 +9,7 @@
   let allLoans = [];
   let allBarcodes = [];
   let showingOverdueOnly = false;
+  let lastBorrowerQuery = '';
 
   // ============================================================================
   // BUSY CURSOR — wraps google.script.run so the cursor signals pending work
@@ -140,7 +141,7 @@
     if (tabName === 'Circulation') {
       prewarmBarcodes();
     } else if (tabName === 'Borrowers') {
-      loadBorrowers();
+      showBorrowersEmptyState();
     } else if (tabName === 'Media') {
       document.getElementById('media-tbody').innerHTML =
         '<tr><td colspan="5" class="empty-state">Enter a search term to find resources</td></tr>';
@@ -149,17 +150,11 @@
     }
   }
 
-  function loadBorrowers() {
+  function showBorrowersEmptyState() {
+    document.getElementById('borrower-search').value = '';
+    lastBorrowerQuery = '';
     document.getElementById('borrowers-tbody').innerHTML =
-      '<tr><td colspan="5" class="loading">Loading...</td></tr>';
-
-    google.script.run
-      .withSuccessHandler(function (borrowers) {
-        allBorrowers = borrowers || [];
-        renderBorrowers(allBorrowers);
-      })
-      .withFailureHandler(handleError)
-      .getActiveBorrowers();
+      '<tr><td colspan="5" class="empty-state">Enter a search term to find members</td></tr>';
   }
 
   function loadLoans() {
@@ -184,17 +179,23 @@
   function renderBorrowers(borrowers) {
     var tbody = document.getElementById('borrowers-tbody');
     if (!borrowers || borrowers.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No members found</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No members found</td></tr>';
       return;
     }
 
     tbody.innerHTML = borrowers
+      .slice().sort(function (a, b) { return (a.name || '').localeCompare(b.name || ''); })
       .map(function (b) {
+        var expired = b.status === 'expired';
+        var rowClass = expired ? ' class="row-expired"' : '';
+        var badgeClass = expired ? 'status-inactive' : 'status-active';
+        var badgeText = expired ? 'expired' : 'active';
         return (
-          '<tr data-id="' + b.id + '">' +
+          '<tr' + rowClass + ' data-id="' + b.id + '">' +
           '<td>' + escapeHtml(b.name) + '</td>' +
           '<td>' + escapeHtml(b.email) + '</td>' +
           '<td>' + escapeHtml(b.phone || '') + '</td>' +
+          '<td><span class="status-badge ' + badgeClass + '">' + badgeText + '</span></td>' +
           '<td class="actions-cell">' +
           '<button class="btn btn-secondary" onclick="editBorrower(\'' + b.id + '\')">Edit</button>' +
           '</td>' +
@@ -267,24 +268,26 @@
   // ============================================================================
 
   function searchBorrowersUI() {
-    var query = document.getElementById('borrower-search').value.trim().toLowerCase();
+    var query = document.getElementById('borrower-search').value.trim();
     if (!query) {
-      renderBorrowers(allBorrowers);
+      showBorrowersEmptyState();
       return;
     }
-
-    var filtered = allBorrowers.filter(function (b) {
-      return (
-        (b.name && b.name.toLowerCase().indexOf(query) !== -1) ||
-        (b.email && b.email.toLowerCase().indexOf(query) !== -1)
-      );
-    });
-    renderBorrowers(filtered);
+    document.getElementById('borrowers-tbody').innerHTML =
+      '<tr><td colspan="5" class="loading">Searching...</td></tr>';
+    lastBorrowerQuery = query;
+    google.script.run
+      .withSuccessHandler(function (results) {
+        allBorrowers = results || [];
+        renderBorrowers(allBorrowers);
+      })
+      .withFailureHandler(handleError)
+      .searchBorrowers(query);
   }
 
   function clearBorrowerSearch() {
-    document.getElementById('borrower-search').value = '';
-    renderBorrowers(allBorrowers);
+    allBorrowers = [];
+    showBorrowersEmptyState();
   }
 
   function searchMediaUI() {
@@ -459,7 +462,10 @@
         if (result.success) {
           showStatus('Member saved!', 'success');
           closeModal();
-          loadBorrowers();
+          if (lastBorrowerQuery) {
+            document.getElementById('borrower-search').value = lastBorrowerQuery;
+            searchBorrowersUI();
+          }
         } else {
           showStatus(result.error || 'Failed to save member', 'error');
         }
@@ -798,9 +804,14 @@
               return;
             }
             container.innerHTML = results.slice(0, 20).map(function (b) {
-              return '<div class="autocomplete-item" onclick="selectCirculationMember(\'' +
+              var expired = b.status === 'expired';
+              var itemClass = 'autocomplete-item' + (expired ? ' expired' : '');
+              var badge = expired
+                ? ' <span class="status-badge status-inactive" style="margin-left:6px">expired</span>'
+                : '';
+              return '<div class="' + itemClass + '" onclick="selectCirculationMember(\'' +
                 escapeAttr(b.id) + '\',\'' + escapeAttr(b.name) + '\',\'' + escapeAttr(b.email) + '\')">' +
-                escapeHtml(b.name) + ' <span class="author">(' + escapeHtml(b.email) + ')</span></div>';
+                escapeHtml(b.name) + badge + ' <span class="author">(' + escapeHtml(b.email) + ')</span></div>';
             }).join('');
           })
           .withFailureHandler(function () {

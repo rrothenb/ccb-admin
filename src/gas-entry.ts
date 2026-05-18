@@ -146,15 +146,6 @@ function getAllBorrowers(): unknown[] {
 }
 
 /**
- * Gets active borrowers only
- */
-function getActiveBorrowers(): unknown[] {
-  const service = getBorrowerService();
-  const result = service.getActiveBorrowers();
-  return result.success && result.data ? result.data.sort((a, b) => a.name.localeCompare(b.name)) : [];
-}
-
-/**
  * Searches borrowers
  */
 function searchBorrowers(query: string): unknown[] {
@@ -591,7 +582,6 @@ function extendLoanByBarcode(barcode: string, days: number = 21): { success: boo
 
 // Borrower functions
 (globalThis as Record<string, unknown>).getAllBorrowers = getAllBorrowers;
-(globalThis as Record<string, unknown>).getActiveBorrowers = getActiveBorrowers;
 (globalThis as Record<string, unknown>).searchBorrowers = searchBorrowers;
 (globalThis as Record<string, unknown>).saveBorrower = saveBorrower;
 
