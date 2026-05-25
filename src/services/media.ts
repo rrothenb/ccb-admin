@@ -7,53 +7,83 @@ import { BaseEntityService } from './base-service';
 import {getLoanService} from "./loans";
 
 /**
- * Curated list of classifications exposed in the Resources tab dropdown.
- * Case-insensitive match against the sheet's `classification` field, except
- * "English Course" which matches any value that begins with "English Course".
- * Edit this list to add or rename a classification.
+ * A classification offered in the Resources tab dropdown.
+ * `value` is matched against the sheet's `classification` field; `label` is what
+ * the user sees (defaults to `value`). When `prefix` is true the value is matched
+ * as a prefix (e.g. "DVD F" matches "DVD F 060", "DVD F 100", …) rather than exactly.
  */
-export const CLASSIFICATIONS: string[] = [
-  'Bilingual',
-  'BIOG',
-  'CD',
-  'CF',
-  'DET',
-  'Easy Reader Level 1',
-  'Easy Reader Level 2',
-  'Easy Reader Level 3',
-  'Easy Reader Level 4',
-  'Easy Reader Level 5',
-  'Easy Reader Level 6',
-  'Easy Reader Starter Level',
-  'ELT Magazine',
-  'ELT Magazine CD',
-  'ELT Resource CD',
-  'ELT Resource Folder',
-  'ELT Resource Magazine',
-  'English Course',
-  'FAN',
-  'Fiction Short stories',
-  'FSS',
-  'GEN',
-  'HF',
-  'HUM',
-  'JF',
-  'Kids',
-  'Literature',
-  'Magazine',
-  'RF',
+export interface ClassificationOption {
+  value: string;
+  label: string;
+  prefix?: boolean;
+}
+
+/**
+ * Curated list of classifications exposed in the Resources tab dropdown.
+ * Matching is case-insensitive. Edit this list to add or rename a classification.
+ */
+export const CLASSIFICATIONS: ClassificationOption[] = [
+  { value: 'Bilingual', label: 'Bilingual' },
+  { value: 'BIOG', label: 'BIOG' },
+  { value: 'CD', label: 'CD' },
+  { value: 'CF', label: 'CF' },
+  { value: 'DET', label: 'DET' },
+  { value: 'DVD C', label: 'DVD – Classics', prefix: true },
+  { value: 'DVD D', label: 'DVD – Documentaries', prefix: true },
+  { value: 'DVD F', label: 'DVD – Film', prefix: true },
+  { value: 'DVD K', label: 'DVD – Kids', prefix: true },
+  { value: 'DVD S', label: 'DVD – Shakespeare', prefix: true },
+  { value: 'DVD TV', label: 'DVD – TV', prefix: true },
+  { value: 'Easy Reader Level 1', label: 'Easy Reader Level 1' },
+  { value: 'Easy Reader Level 2', label: 'Easy Reader Level 2' },
+  { value: 'Easy Reader Level 3', label: 'Easy Reader Level 3' },
+  { value: 'Easy Reader Level 4', label: 'Easy Reader Level 4' },
+  { value: 'Easy Reader Level 5', label: 'Easy Reader Level 5' },
+  { value: 'Easy Reader Level 6', label: 'Easy Reader Level 6' },
+  { value: 'Easy Reader Starter Level', label: 'Easy Reader Starter Level' },
+  { value: 'ELT Magazine', label: 'ELT Magazine' },
+  { value: 'ELT Magazine CD', label: 'ELT Magazine CD' },
+  { value: 'ELT Resource CD', label: 'ELT Resource CD' },
+  { value: 'ELT Resource Folder', label: 'ELT Resource Folder' },
+  { value: 'ELT Resource Magazine', label: 'ELT Resource Magazine' },
+  { value: 'English Course', label: 'English Course', prefix: true },
+  { value: 'FAN', label: 'FAN' },
+  { value: 'Fiction Short stories', label: 'Fiction Short stories' },
+  { value: 'FSS', label: 'FSS' },
+  { value: 'GEN', label: 'GEN' },
+  { value: 'HF', label: 'HF' },
+  { value: 'HUM', label: 'HUM' },
+  { value: 'JF', label: 'JF' },
+  { value: 'Kids', label: 'Kids' },
+  { value: 'Literature', label: 'Literature' },
+  { value: 'Magazine', label: 'Magazine' },
+  { value: 'RF', label: 'RF' },
 ];
 
 /**
- * Tests whether an item's classification value matches a selected dropdown entry.
- * "English Course" is a prefix match; everything else is case-insensitive exact match.
+ * Sentinel browse value for "show everything that matches none of the curated
+ * classifications" (blanks, shelf codes, typos). Not an assignable classification.
+ */
+export const UNCLASSIFIED_VALUE = '__UNCLASSIFIED__';
+
+/**
+ * Tests whether an item's classification value matches a selected dropdown value.
+ * Prefix-flagged classifications match by prefix; the rest are case-insensitive exact matches.
  */
 export function classificationMatches(itemClassification: string, selected: string): boolean {
   const item = (itemClassification || '').trim().toLowerCase();
   const sel = (selected || '').trim().toLowerCase();
   if (!sel) return true;
-  if (sel === 'english course') return item.startsWith('english course');
+  const option = CLASSIFICATIONS.find((c) => c.value.toLowerCase() === sel);
+  if (option && option.prefix) return item.startsWith(sel);
   return item === sel;
+}
+
+/**
+ * Whether an item's classification matches any curated classification (exact or prefix).
+ */
+export function matchesAnyClassification(itemClassification: string): boolean {
+  return CLASSIFICATIONS.some((c) => classificationMatches(itemClassification, c.value));
 }
 
 /**

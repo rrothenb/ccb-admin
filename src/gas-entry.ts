@@ -16,7 +16,7 @@ import {
 import { doGet, getAppContext, include } from './ui/webapp';
 
 import { getBorrowerService } from './services/borrowers';
-import { getMediaService, CLASSIFICATIONS, classificationMatches } from './services/media';
+import { getMediaService, CLASSIFICATIONS, classificationMatches, matchesAnyClassification, UNCLASSIFIED_VALUE, ClassificationOption } from './services/media';
 import { getLoanService } from './services/loans';
 import { writeAuditLog, setAuditLogSpreadsheetId, getAuditLogSpreadsheetId } from './services/audit-log';
 import { Media } from './types';
@@ -284,8 +284,12 @@ function searchMedia(query: string): unknown[] {
 /**
  * Returns the curated list of classifications shown in the Resources tab dropdown.
  */
-function getClassifications(): string[] {
-  return CLASSIFICATIONS.slice();
+function getClassifications(): { value: string; label: string; prefix: boolean }[] {
+  return CLASSIFICATIONS.map((c: ClassificationOption) => ({
+    value: c.value,
+    label: c.label,
+    prefix: !!c.prefix,
+  }));
 }
 
 /**
@@ -313,7 +317,11 @@ function searchAllMedia(query: string, classification: string = ''): unknown[] {
 
   return data
     .filter(item => item.barcodes)
-    .filter(item => !hasClassification || classificationMatches(`${item.classification}`, classification))
+    .filter(item => {
+      if (!hasClassification) return true;
+      if (classification === UNCLASSIFIED_VALUE) return !matchesAnyClassification(`${item.classification}`);
+      return classificationMatches(`${item.classification}`, classification);
+    })
     .filter(item =>
       !hasQuery ||
       `${item.title}`.toLowerCase().includes(lowerQuery) ||

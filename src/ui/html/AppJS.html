@@ -10,6 +10,8 @@
   let allBarcodes = [];
   let showingOverdueOnly = false;
   let lastBorrowerQuery = '';
+  let classificationOptions = [];
+  const UNCLASSIFIED_VALUE = '__UNCLASSIFIED__';
 
   // ============================================================================
   // BUSY CURSOR — wraps google.script.run so the cursor signals pending work
@@ -121,18 +123,64 @@
   function loadClassifications() {
     google.script.run
       .withSuccessHandler(function (classifications) {
+        classificationOptions = classifications || [];
         var select = document.getElementById('media-classification');
-        if (!select || !classifications) return;
-        for (var i = 0; i < classifications.length; i++) {
+        if (!select) return;
+        for (var i = 0; i < classificationOptions.length; i++) {
           var opt = document.createElement('option');
-          opt.value = classifications[i];
-          opt.textContent = classifications[i];
+          opt.value = classificationOptions[i].value;
+          opt.textContent = classificationOptions[i].label;
           select.appendChild(opt);
         }
+        // Browse-only pseudo-classification: everything matching none of the curated
+        // entries. Kept out of classificationOptions so it never appears in the edit modal.
+        var unclassified = document.createElement('option');
+        unclassified.value = UNCLASSIFIED_VALUE;
+        unclassified.textContent = 'Unclassified / Other';
+        select.appendChild(unclassified);
       })
       .withFailureHandler(handleError)
       .quiet()
       .getClassifications();
+  }
+
+  // Client-side mirror of the server's classificationMatches(): prefix-flagged
+  // entries match by prefix, the rest are case-insensitive exact matches.
+  function classificationMatches(itemClassification, value) {
+    var item = (itemClassification || '').trim().toLowerCase();
+    var sel = (value || '').trim().toLowerCase();
+    if (!sel) return true;
+    var opt = classificationOptions.find(function (c) { return c.value.toLowerCase() === sel; });
+    if (opt && opt.prefix) return item.indexOf(sel) === 0;
+    return item === sel;
+  }
+
+  // Builds the <select id="m-classification"> for the resource modal. Pre-selects
+  // the curated entry that matches `currentValue` (exact or prefix). If nothing
+  // matches, the existing value is preserved as a selected "… (current)" option so
+  // saving doesn't clobber it. The original value rides along in a hidden input.
+  function renderClassificationSelectHtml(currentValue) {
+    var cur = currentValue || '';
+    var matched = null;
+    for (var i = 0; i < classificationOptions.length; i++) {
+      if (classificationMatches(cur, classificationOptions[i].value)) {
+        matched = classificationOptions[i];
+        break;
+      }
+    }
+    var html = '<select id="m-classification">';
+    html += '<option value=""' + (!cur ? ' selected' : '') + '>(none)</option>';
+    if (cur && !matched) {
+      html += '<option value="' + escapeAttr(cur) + '" selected>' + escapeHtml(cur) + ' (current)</option>';
+    }
+    for (var j = 0; j < classificationOptions.length; j++) {
+      var o = classificationOptions[j];
+      var sel = (matched && o.value === matched.value) ? ' selected' : '';
+      html += '<option value="' + escapeAttr(o.value) + '"' + sel + '>' + escapeHtml(o.label) + '</option>';
+    }
+    html += '</select>';
+    html += '<input type="hidden" id="m-classification-original" value="' + escapeAttr(cur) + '">';
+    return html;
   }
 
   // ============================================================================
@@ -605,7 +653,7 @@
         '<div class="form-group"><label for="m-title">Title *</label><input type="text" id="m-title" required></div>' +
         '<div class="form-group"><label for="m-author">Author</label><input type="text" id="m-author"></div>' +
         '<div class="form-group"><label for="m-type">Type</label><input type="text" id="m-type"></div>' +
-        '<div class="form-group"><label for="m-classification">Classification</label><input type="text" id="m-classification"></div>' +
+        '<div class="form-group"><label for="m-classification">Classification</label>' + renderClassificationSelectHtml('') + '</div>' +
         '<input type="hidden" id="m-id" value="">' +
         '<div class="form-group"><label for="m-barcodes">Barcodes *</label><input type="text" id="m-barcodes" required placeholder="Scan barcode..." title="Scan the barcode label on this resource — use | to separate multiple copies"></div>' +
         '<div class="form-group">' +
@@ -657,7 +705,7 @@
       '</div>' +
       '<div class="form-group">' +
       '<label for="m-classification">Classification</label>' +
-      '<input type="text" id="m-classification" value="' + escapeAttr(media.classification || '') + '">' +
+      renderClassificationSelectHtml(media.classification || '') +
       '</div>' +
       '<div class="form-group">' +
       '<label for="m-barcodes">Barcodes</label>' +
@@ -687,6 +735,21 @@
     return Object.keys(out).length ? JSON.stringify(out) : '';
   }
 
+  // Decides what classification to store. If the dropdown selection still matches
+  // the item's original value (exact or prefix), the original is kept verbatim so
+  // we don't lose case variants or DVD shelf numbers. Picking a different category
+  // writes that category; an explicit blank clears the classification.
+  function resolveClassification() {
+    var select = document.getElementById('m-classification');
+    var selected = select ? select.value : '';
+    var originalEl = document.getElementById('m-classification-original');
+    var original = originalEl ? originalEl.value : '';
+    if (selected && classificationMatches(original, selected)) {
+      return original;
+    }
+    return selected;
+  }
+
   function submitMedia(event) {
     event.preventDefault();
     showStatus('Saving...', 'loading');
@@ -696,7 +759,7 @@
       title: document.getElementById('m-title').value,
       author: document.getElementById('m-author').value,
       type: document.getElementById('m-type').value,
-      classification: document.getElementById('m-classification').value,
+      classification: resolveClassification(),
       barcodes: document.getElementById('m-barcodes').value,
       resourceBox: collectResourceBox(),
     };
