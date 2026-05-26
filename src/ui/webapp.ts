@@ -15,6 +15,7 @@ function doGet(): GoogleAppsScript.HTML.HtmlOutput {
   return HtmlService.createTemplateFromFile('App')
     .evaluate()
     .setTitle('CCB Library Admin')
+    .setFaviconUrl('https://www.ccb-lille.com/wp-content/uploads/2024/02/cropped-favicon-32x32.png')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
