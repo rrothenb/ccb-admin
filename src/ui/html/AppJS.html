@@ -829,7 +829,7 @@
   }
 
   function findUniqueBarcodeMatch(prefix) {
-    if (!prefix || !allBarcodes || !allBarcodes.length) return null;
+    if (!prefix || prefix.length < 6 || !allBarcodes || !allBarcodes.length) return null;
     var match = null;
     for (var i = 0; i < allBarcodes.length; i++) {
       var bc = allBarcodes[i];
