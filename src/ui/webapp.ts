@@ -14,7 +14,7 @@ import { SheetName } from '../types';
 function doGet(): GoogleAppsScript.HTML.HtmlOutput {
   return HtmlService.createTemplateFromFile('App')
     .evaluate()
-    .setTitle('CCB Admin')
+    .setTitle('CCB Library Admin')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
