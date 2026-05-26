@@ -4,19 +4,25 @@ A library management system built on Google Apps Script and Google Sheets, deplo
 
 ## Overview
 
-This system provides a web-based interface for managing a church or community library. It uses:
+This system provides a web-based interface for managing a community library. It uses:
 - **Google Sheets** as the database (3 master spreadsheets: Borrowers, Media, Loans)
-- **Google Apps Script** for the backend logic
+- **Google Apps Script** for the backend logic (TypeScript, bundled with esbuild)
 - **Web App deployment** for the user interface
 - **Google Drive sharing** for access control
 
+## Related Projects
+
+- **[liberty-extract](https://github.com/rrothenb/liberty-extract)** — companion tooling that extracts the data needed to populate the master spreadsheets (Borrowers, Media, Loans) out of **Liberty**, the library system this app is migrating from. Use it to produce the initial spreadsheet data for setup.
+
 ## Key Features
 
-- **Standalone web app** - No spreadsheet visible to users, just the web interface
-- **Simple access control** - Share a single "CCB Webapp Access Control" spreadsheet to grant access
-- **Tab-based navigation** - Borrowers, Media, and Loans tabs
-- **Client-side search** - Fast filtering of loaded data
-- **No authorization prompts** - Users just sign in with their Google account
+- **Standalone web app** — no spreadsheet visible to users, just the web interface
+- **Circulation Desk** — check out, return, and extend loans by scanning/typing a barcode, with barcode typeahead and per-session history
+- **Members** — full roster shown by default, with client-side search and sortable Name/Expiry columns; active/expired status derived from each member's expiry date
+- **Resources** — search the catalog by title/author/barcode/etc., filter by classification and by availability status (available / on-loan / no-copies); add, edit, and delete resources
+- **Loans** — view active loans, filter to overdue only, search by member/resource/barcode, and sort by member, resource, checkout date, or due date
+- **Audit logging** — write actions (checkouts, returns, edits, deletions) are recorded to a configured log spreadsheet
+- **No authorization prompts beyond sign-in** — users just sign in with their Google account
 
 ## Quick Start
 
@@ -24,16 +30,16 @@ See [SETUP.md](SETUP.md) for detailed setup instructions.
 
 **Summary:**
 1. Install dependencies: `npm install`
-2. Login to Google Apps Script: `npx clasp login`
-3. Create 3 master spreadsheets (Borrowers, Media, Loans)
-4. Create an "Access Control" spreadsheet for permissions
-5. Create Apps Script project: `npx clasp create --type standalone`
-6. Deploy: `npm run push`
-7. Configure in Apps Script editor:
-   - Run `setAccessControlId('your-spreadsheet-id')`
-   - Run `runDiscovery()` to find master spreadsheets
-8. Deploy as web app
-9. Share the web app URL with users
+2. Log in to Google Apps Script: `npx clasp login`
+3. Create 3 master spreadsheets in your Drive named **Borrowers**, **Media**, and **Loans**
+4. Create the Apps Script project: `npx clasp create --type standalone`
+5. Push the code and create a deployment: `npm run deploy`
+6. Configure in the Apps Script editor:
+   - Run `runDiscovery()` to locate and store the master spreadsheet IDs
+   - (Optional) Run `setAuditLogSpreadsheetId()` to enable audit logging
+   - Run `showConfig()` to verify configuration
+7. Deploy as a web app (Execute as: **User accessing**, Access: **Anyone with a Google account**)
+8. Share the **three master spreadsheets** with your users, and give them the web app URL
 
 ## Architecture
 
@@ -42,143 +48,89 @@ See [SETUP.md](SETUP.md) for detailed setup instructions.
 ```
 User visits web app URL
     ↓
-Signs in with Google account
+Signs in with their Google account
     ↓
-Script checks: Can user access the Access Control spreadsheet?
+Web app runs AS the signed-in user (executeAs: USER_ACCESSING)
     ↓
-Yes → Load the web app UI
-No  → Show "Access Denied"
-    ↓
-Web app reads/writes directly to master spreadsheets
+Apps Script reads/writes the master spreadsheets using the user's own
+Google permissions — if the user isn't shared on a spreadsheet, the
+operation fails with an "Access denied" message
 ```
 
 ### Spreadsheets
 
-**3 Master Spreadsheets** (your data):
-- **Borrowers** - Library members
-- **Media** - Books, DVDs, etc.
-- **Loans** - Checkout records
+**3 Master Spreadsheets** (your data) — discovered by name prefix via `runDiscovery()`:
+- **Borrowers** — library members
+- **Media** — books, DVDs, etc. (a.k.a. "Resources" in the UI)
+- **Loans** — active checkout records (rows are removed on return)
 
-**1 Access Control Spreadsheet** (for permissions):
-- Can be any Google Sheet (even empty)
-- Share it with users who should access the web app
-- The web app checks if users can view/edit this spreadsheet
-- To grant access: Share this spreadsheet
-- To revoke access: Remove sharing from this spreadsheet
+**1 Audit Log Spreadsheet** (optional) — write actions are appended here when configured via `setAuditLogSpreadsheetId()`.
 
-### No "Hub" Needed
+## Access Control
 
-Unlike the previous sidebar-based architecture, this web app does **NOT** require:
-- A "Hub" spreadsheet with IMPORTRANGE formulas
-- Users to have direct access to the master spreadsheets
-- Users to open any spreadsheet at all
+Access is governed entirely by **Google's native sharing on the master spreadsheets** — there is no separate access-control spreadsheet or allow-list.
 
-The web app talks directly to the master spreadsheets via Apps Script services.
+Because the web app is deployed with `executeAs: USER_ACCESSING`, every read and write runs under the signed-in user's own Google identity:
+
+- **To grant access:** share the Borrowers, Media, and Loans spreadsheets with the user (editor access is needed for checkouts/returns/edits; viewer access only allows browsing).
+- **To revoke access:** remove the user's sharing from those spreadsheets.
+
+> Note: this is the opposite of an earlier design where the app ran as the owner and users needed no spreadsheet access. Users now **do** need to be shared on the master spreadsheets.
 
 ## Deployment
 
-### Build and Push
+### Build and deploy
 
 ```bash
-npm run build    # Compile TypeScript to Google Apps Script JavaScript
-npm run push     # Upload to Google's servers
+npm run deploy   # Build, push, and update the live web-app deployment
 ```
 
-### Initial Configuration (in Apps Script Editor)
+`npm run deploy` builds the TypeScript, pushes to Apps Script, and updates the existing versioned deployment (the deployment ID is baked into the `deploy` script in `package.json`). This is the command that actually changes what users see at the web app URL.
 
-Open the Apps Script editor:
+```bash
+npm run push     # Build and push files only (no new deployment/version)
+```
+
+`npm run push` uploads the latest code to the Apps Script project but does **not** update the served web-app version — use it only for editor testing, not to ship a change.
+
+### Initial configuration (in the Apps Script editor)
+
+Open the editor:
 ```bash
 npx clasp open
 ```
 
-Then run these setup functions:
+Then run these functions from the editor's function dropdown:
 
-#### 1. Set Access Control Spreadsheet ID
+1. **`runDiscovery`** — searches your Drive for spreadsheets whose names start with "Borrowers", "Media", and "Loans" (newest match wins) and stores their IDs in script properties. Check the execution log to confirm all three were found.
+2. **`setAuditLogSpreadsheetId`** *(optional)* — enables audit logging by recording the log spreadsheet ID in script properties.
+3. **`showConfig`** — prints the current configuration so you can verify the master spreadsheet IDs are set.
+4. **`clearConfig`** — clears the stored master spreadsheet configuration (useful before re-running discovery).
 
-First, get your Access Control spreadsheet ID from its URL (the long string between `/d/` and `/edit`).
+### Deploy as a web app
 
-In the Apps Script editor:
-1. Find the `setAccessControlId` function in the code (in `gas-entry.ts`)
-2. Temporarily modify it to call itself with your ID:
-   ```javascript
-   function setAccessControlId(spreadsheetId) {
-     // ... existing code ...
-   }
-
-   // Add this temporary function:
-   function setupAccessControl() {
-     setAccessControlId('your-spreadsheet-id-here');
-   }
-   ```
-3. At the top of the editor, select `setupAccessControl` from the function dropdown
-4. Click the **Run** button (play icon)
-5. Check the execution log at the bottom to confirm it ran successfully
-
-Alternatively, you can run it directly from the console:
-1. At the top of the editor, find the function dropdown and select `setAccessControlId`
-2. Click **Run**
-3. You'll get an error, but you can manually call it from the execution log console
-
-**Easier method:** Just modify the code temporarily:
-```javascript
-function runSetup() {
-  setAccessControlId('your-spreadsheet-id-here');
-}
-```
-Then select `runSetup` from the dropdown and click Run.
-
-#### 2. Discover Master Spreadsheets
-
-Run this to find your Borrowers, Media, and Loans spreadsheets:
-1. Select `runDiscovery` from the function dropdown at the top
-2. Click the **Run** button
-3. Check the execution log at the bottom to verify all 3 spreadsheets were found
-
-#### 3. Verify Configuration
-
-Run this to see the current configuration:
-1. Select `showConfig` from the function dropdown
-2. Click **Run**
-3. Check the execution log - all 4 IDs should be set (Borrowers, Media, Loans, Access Control)
-
-### Deploy as Web App
-
-1. In Apps Script editor: **Deploy → New deployment**
+1. In the Apps Script editor: **Deploy → New deployment**
 2. Type: **Web app**
-3. Description: "CCB Admin v1" (or whatever you prefer)
-4. Execute as: **Me** (your account)
-5. Who has access: **Anyone with Google account**
-6. Click **Deploy** and copy the URL
+3. Execute as: **User accessing the web app**
+4. Who has access: **Anyone with a Google account**
+5. Click **Deploy** and copy the URL
 
-### Share with Users
+### Share with users
 
-1. Share the **Access Control spreadsheet** with users who should access the web app
+1. Share the **Borrowers, Media, and Loans** spreadsheets with the users who should have access
 2. Give them the **web app URL**
-3. They visit the URL and sign in - that's it!
-
-## Managing Access
-
-**To add a user:**
-- Share the Access Control spreadsheet with them (viewer or editor, doesn't matter)
-
-**To remove a user:**
-- Remove their access from the Access Control spreadsheet
-
-**Note:** Users do NOT need access to the master spreadsheets. The web app runs as your account and has full access to read/write the master spreadsheets.
+3. They visit the URL and sign in
 
 ## Development Workflow
 
-### Local Development
+### Local development
 
 ```bash
-# Watch mode - recompiles on changes
-npm run watch
-
-# In another terminal, push when ready
-npm run push
+npm run watch    # Type-check in watch mode (tsc --watch)
+npm run deploy   # Build, push, and deploy when ready to ship a change
 ```
 
-### Running Tests
+### Running tests
 
 ```bash
 npm test                  # Run all tests
@@ -194,55 +146,52 @@ npm run lint
 
 ## Available Commands
 
-- `npm run build` - Compile TypeScript
-- `npm run push` - Build and push to Google Apps Script
-- `npm run deploy` - Build, push, and create new deployment
-- `npm run watch` - Watch for changes and rebuild
-- `npx clasp open` - Open in Apps Script editor
-- `npx clasp logs` - View execution logs
+- `npm run build` — Compile/bundle TypeScript to `dist/`
+- `npm run push` — Build and push files to Apps Script (no new deployment)
+- `npm run deploy` — Build, push, and update the live web-app deployment
+- `npm run watch` — Type-check on change
+- `npm test` / `npm run test:watch` / `npm run test:coverage` — Jest tests
+- `npm run lint` — ESLint
+- `npx clasp open` — Open in the Apps Script editor
+- `npx clasp logs` — View execution logs
 
 ## Project Structure
 
 ```
 ccb-admin/
 ├── src/
-│   ├── types/           # TypeScript type definitions
-│   ├── services/        # Business logic (borrowers, media, loans)
+│   ├── types/           # TypeScript type definitions (entities, config)
+│   ├── services/        # Business logic (borrowers, media, loans, discovery, audit-log)
 │   ├── ui/              # Web app UI
-│   │   ├── webapp.ts    # Entry point and access control
+│   │   ├── webapp.ts    # doGet entry point
 │   │   └── html/        # HTML templates (App.html, AppJS.html, Styles.html)
-│   ├── utils/           # Utility functions
-│   └── gas-entry.ts     # Apps Script global function exports
+│   └── gas-entry.ts     # Apps Script global function exports (client-callable)
 ├── dist/                # Compiled output (auto-generated, pushed to GAS)
 ├── build.js             # Build script (esbuild)
 ├── package.json         # Dependencies and scripts
 ├── tsconfig.json        # TypeScript configuration
-└── appsscript.json      # Apps Script manifest
+└── appsscript.json      # Apps Script manifest (web app + OAuth scopes)
 ```
+
+> Client-side JS in `AppJS.html` calls server functions via `google.script.run`. Any new server function in `gas-entry.ts` must be exported onto `globalThis` (see the bindings at the bottom of the file) or the client cannot call it.
 
 ## Troubleshooting
 
-### "Could not access master spreadsheet" error
+### "Access denied" / "Could not access master spreadsheet"
 
-Run `runDiscovery()` in the Apps Script editor to reconfigure master spreadsheet IDs.
+- Confirm the user is shared on the relevant master spreadsheet (editor access for writes).
+- In the editor, run `showConfig()` to confirm the master spreadsheet IDs are set; if not, run `runDiscovery()`.
 
-### Menu or web app doesn't appear
+### Web app doesn't appear or shows stale content
 
-1. Refresh the page
-2. Check logs: `npx clasp logs`
-3. Verify deployment: `npx clasp deployments`
-
-### Access denied for valid users
-
-1. Verify the Access Control spreadsheet ID is set: run `showConfig()`
-2. Verify the user has access to the Access Control spreadsheet
-3. Check Apps Script logs for specific errors
+1. Make sure you ran `npm run deploy` (not just `npm run push`).
+2. Refresh the page / clear your browser cache.
+3. Check logs: `npx clasp logs`; verify deployment: `npx clasp deployments`.
 
 ### Changes not appearing
 
-1. Make sure you ran `npm run push`
-2. Clear your browser cache
-3. Check for TypeScript errors: `npm run build`
+1. Confirm `npm run deploy` completed without errors.
+2. Check for TypeScript/build errors: `npm run build`.
 
 ## License
 

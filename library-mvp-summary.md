@@ -1,5 +1,13 @@
 # Library System MVP - Decision Summary
 
+> ⚠️ **Historical document — superseded.** This captures early MVP planning decisions and does **not** describe the system as built. The shipped implementation diverged in major ways:
+> - **No "Hub" spreadsheet and no `IMPORTRANGE`.** The app is a **standalone web app** (`doGet`) that reads/writes the master spreadsheets directly via Apps Script.
+> - **No bound sidebar/menu.** The UI is a tab-based web app (Circulation Desk, Members, Resources, Loans).
+> - **Runs as the accessing user** (`executeAs: USER_ACCESSING`); access is controlled by sharing the three master spreadsheets — not by a Hub and not by an owner-runs-everything model.
+> - **Entity fields evolved** (e.g. Borrowers track `expiryDate`/`memberSince`; Media uses `classification`/`barcodes`/`resourceBox`; Loans store `barcode`/`title`/`checkoutDate`/`dueDate`/`borrower*`).
+>
+> For accurate, current documentation see **[README.md](README.md)** and **[SETUP.md](SETUP.md)**. The content below is retained only as a record of the original design rationale.
+
 ## Goal
 Build an MVP to replace the current library management process. Prioritize final UX over features—make it mistake-proof for non-technical volunteers.
 
