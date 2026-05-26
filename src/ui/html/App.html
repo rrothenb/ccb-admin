@@ -427,15 +427,16 @@
           <table class="data-table" id="borrowers-table">
             <thead>
               <tr>
-                <th>Name</th>
+                <th class="sortable" id="th-sort-name" onclick="sortBorrowers('name')" title="Click to sort by name">Name<span class="sort-indicator"></span></th>
                 <th>Email</th>
                 <th>Phone</th>
+                <th class="sortable" id="th-sort-expiry" onclick="sortBorrowers('expiryDate')" title="Click to sort by expiry date">Expiry<span class="sort-indicator"></span></th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody id="borrowers-tbody">
-              <tr><td colspan="5" class="empty-state">Enter a search term to find members</td></tr>
+              <tr><td colspan="6" class="loading">Loading...</td></tr>
             </tbody>
           </table>
         </div>

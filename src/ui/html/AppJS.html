@@ -10,6 +10,7 @@
   let allBarcodes = [];
   let showingOverdueOnly = false;
   let lastBorrowerQuery = '';
+  let borrowerSort = { key: 'name', dir: 'asc' };
   let classificationOptions = [];
   const UNCLASSIFIED_VALUE = '__UNCLASSIFIED__';
 
@@ -217,7 +218,7 @@
     if (tabName === 'Circulation') {
       prewarmBarcodes();
     } else if (tabName === 'Borrowers') {
-      showBorrowersEmptyState();
+      loadBorrowers();
     } else if (tabName === 'Media') {
       document.getElementById('media-tbody').innerHTML =
         '<tr><td colspan="5" class="empty-state">Enter a search term or pick a classification or status to find resources</td></tr>';
@@ -226,11 +227,20 @@
     }
   }
 
-  function showBorrowersEmptyState() {
+  // Loads the full member roster (the Members tab shows everyone by default,
+  // no search required). Clearing or emptying the search returns here.
+  function loadBorrowers() {
     document.getElementById('borrower-search').value = '';
     lastBorrowerQuery = '';
     document.getElementById('borrowers-tbody').innerHTML =
-      '<tr><td colspan="5" class="empty-state">Enter a search term to find members</td></tr>';
+      '<tr><td colspan="6" class="loading">Loading...</td></tr>';
+    google.script.run
+      .withSuccessHandler(function (results) {
+        allBorrowers = results || [];
+        renderBorrowers(allBorrowers);
+      })
+      .withFailureHandler(handleError)
+      .getAllBorrowers();
   }
 
   function loadLoans() {
@@ -254,13 +264,14 @@
 
   function renderBorrowers(borrowers) {
     var tbody = document.getElementById('borrowers-tbody');
+    updateSortIndicators();
     if (!borrowers || borrowers.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No members found</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No members found</td></tr>';
       return;
     }
 
     tbody.innerHTML = borrowers
-      .slice().sort(function (a, b) { return (a.name || '').localeCompare(b.name || ''); })
+      .slice().sort(compareBorrowers)
       .map(function (b) {
         var expired = b.status === 'expired';
         var rowClass = expired ? ' class="row-expired"' : '';
@@ -271,6 +282,7 @@
           '<td>' + escapeHtml(b.name) + '</td>' +
           '<td>' + escapeHtml(b.email) + '</td>' +
           '<td>' + escapeHtml(b.phone || '') + '</td>' +
+          '<td>' + escapeHtml(b.expiryDate || '') + '</td>' +
           '<td><span class="status-badge ' + badgeClass + '">' + badgeText + '</span></td>' +
           '<td class="actions-cell">' +
           '<button class="btn btn-secondary" onclick="editBorrower(\'' + b.id + '\')">Edit</button>' +
@@ -279,6 +291,50 @@
         );
       })
       .join('');
+  }
+
+  // Parses an expiry-date string to a sortable timestamp; blank/invalid dates
+  // sort to the end (largest value) regardless of direction's intent.
+  function parseDateValue(s) {
+    if (!s) return Number.POSITIVE_INFINITY;
+    var t = new Date(s).getTime();
+    return isNaN(t) ? Number.POSITIVE_INFINITY : t;
+  }
+
+  function compareBorrowers(a, b) {
+    var dir = borrowerSort.dir === 'desc' ? -1 : 1;
+    if (borrowerSort.key === 'expiryDate') {
+      var ta = parseDateValue(a.expiryDate);
+      var tb = parseDateValue(b.expiryDate);
+      if (ta !== tb) return (ta < tb ? -1 : 1) * dir;
+      return (a.name || '').localeCompare(b.name || '');
+    }
+    return (a.name || '').localeCompare(b.name || '') * dir;
+  }
+
+  function sortBorrowers(key) {
+    if (borrowerSort.key === key) {
+      borrowerSort.dir = borrowerSort.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      borrowerSort.key = key;
+      borrowerSort.dir = 'asc';
+    }
+    renderBorrowers(allBorrowers);
+  }
+
+  function updateSortIndicators() {
+    var arrow = borrowerSort.dir === 'asc' ? '▲' : '▼';
+    setSortIndicator('#th-sort-name .sort-indicator', borrowerSort.key === 'name', arrow);
+    setSortIndicator('#th-sort-expiry .sort-indicator', borrowerSort.key === 'expiryDate', arrow);
+  }
+
+  // Active column gets the direction arrow in accent color; inactive sortable
+  // columns still show a muted up/down glyph so it's clear they can be sorted.
+  function setSortIndicator(selector, active, arrow) {
+    var el = document.querySelector(selector);
+    if (!el) return;
+    el.textContent = active ? arrow : '⇵';
+    el.className = 'sort-indicator' + (active ? ' active' : '');
   }
 
   function renderMedia(media) {
@@ -346,11 +402,11 @@
   function searchBorrowersUI() {
     var query = document.getElementById('borrower-search').value.trim();
     if (!query) {
-      showBorrowersEmptyState();
+      loadBorrowers();
       return;
     }
     document.getElementById('borrowers-tbody').innerHTML =
-      '<tr><td colspan="5" class="loading">Searching...</td></tr>';
+      '<tr><td colspan="6" class="loading">Searching...</td></tr>';
     lastBorrowerQuery = query;
     google.script.run
       .withSuccessHandler(function (results) {
@@ -362,8 +418,7 @@
   }
 
   function clearBorrowerSearch() {
-    allBorrowers = [];
-    showBorrowersEmptyState();
+    loadBorrowers();
   }
 
   function searchMediaUI() {
@@ -587,6 +642,8 @@
           if (lastBorrowerQuery) {
             document.getElementById('borrower-search').value = lastBorrowerQuery;
             searchBorrowersUI();
+          } else {
+            loadBorrowers();
           }
         } else {
           restoreButton(saveBtn);

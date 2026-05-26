@@ -137,12 +137,25 @@ Loans: ${loanResult.success ? 'OK' : loanResult.error}`);
 // ============================================================================
 
 /**
- * Gets all borrowers
+ * Gets all borrowers, sorted by name and annotated with an active/expired
+ * `status` (same derivation as searchBorrowers) so the Members tab can show the
+ * whole roster without requiring a search.
  */
 function getAllBorrowers(): unknown[] {
   const service = getBorrowerService();
   const result = service.getAll();
-  return result.success && result.data ? result.data.sort((a, b) => a.name.localeCompare(b.name)) : [];
+  if (!result.success || !result.data) return [];
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return result.data
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(b => ({
+      ...b,
+      status: (b.expiryDate && new Date(b.expiryDate) > today) ? 'active' : 'expired',
+    }));
 }
 
 /**

@@ -160,6 +160,32 @@
     border: 1px solid #93c5fd;
   }
 
+  /* Sortable table headers */
+  .data-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    color: #4f46e5;
+    text-decoration: underline dotted #a5b4fc;
+    text-underline-offset: 3px;
+  }
+
+  .data-table th.sortable:hover {
+    background: #eef2ff;
+  }
+
+  .sort-indicator {
+    display: inline-block;
+    width: 1em;
+    margin-left: 4px;
+    color: #9ca3af;
+    font-size: 0.85em;
+  }
+
+  .sort-indicator.active {
+    color: #4f46e5;
+  }
+
   /* Form styles for dialogs */
   .form-group {
     margin-bottom: 16px;
