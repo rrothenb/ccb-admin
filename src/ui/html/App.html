@@ -417,6 +417,7 @@
         <div class="search-box">
           <input type="text" id="borrower-search" placeholder="Search members by name or email..."
                  title="Search by name or email address"
+                 oninput="searchBorrowersUI()"
                  onkeypress="if(event.key==='Enter') searchBorrowersUI()">
           <button class="btn btn-secondary" onclick="searchBorrowersUI()"
                   data-tooltip="Search members">Search</button>

@@ -227,20 +227,35 @@
     }
   }
 
-  // Loads the full member roster (the Members tab shows everyone by default,
-  // no search required). Clearing or emptying the search returns here.
+  // Loads the full member roster once (the Members tab shows everyone by
+  // default). Name/email search then filters this list locally — no server
+  // round-trip. The current search box value is preserved across reloads.
   function loadBorrowers() {
-    document.getElementById('borrower-search').value = '';
-    lastBorrowerQuery = '';
     document.getElementById('borrowers-tbody').innerHTML =
       '<tr><td colspan="6" class="loading">Loading...</td></tr>';
     google.script.run
       .withSuccessHandler(function (results) {
         allBorrowers = results || [];
-        renderBorrowers(allBorrowers);
+        applyBorrowerFilter();
       })
       .withFailureHandler(handleError)
       .getAllBorrowers();
+  }
+
+  // Renders the roster filtered by the search box (name or email, substring,
+  // case-insensitive) entirely client-side.
+  function applyBorrowerFilter() {
+    var query = document.getElementById('borrower-search').value.trim().toLowerCase();
+    lastBorrowerQuery = query;
+    if (!query) {
+      renderBorrowers(allBorrowers);
+      return;
+    }
+    var filtered = allBorrowers.filter(function (b) {
+      return (b.name || '').toLowerCase().indexOf(query) !== -1 ||
+             (b.email || '').toLowerCase().indexOf(query) !== -1;
+    });
+    renderBorrowers(filtered);
   }
 
   function loadLoans() {
@@ -319,7 +334,8 @@
       borrowerSort.key = key;
       borrowerSort.dir = 'asc';
     }
-    renderBorrowers(allBorrowers);
+    // Re-apply the active search filter so sorting doesn't discard it.
+    applyBorrowerFilter();
   }
 
   function updateSortIndicators() {
@@ -400,25 +416,12 @@
   // ============================================================================
 
   function searchBorrowersUI() {
-    var query = document.getElementById('borrower-search').value.trim();
-    if (!query) {
-      loadBorrowers();
-      return;
-    }
-    document.getElementById('borrowers-tbody').innerHTML =
-      '<tr><td colspan="6" class="loading">Searching...</td></tr>';
-    lastBorrowerQuery = query;
-    google.script.run
-      .withSuccessHandler(function (results) {
-        allBorrowers = results || [];
-        renderBorrowers(allBorrowers);
-      })
-      .withFailureHandler(handleError)
-      .searchBorrowers(query);
+    applyBorrowerFilter();
   }
 
   function clearBorrowerSearch() {
-    loadBorrowers();
+    document.getElementById('borrower-search').value = '';
+    applyBorrowerFilter();
   }
 
   function searchMediaUI() {
@@ -639,12 +642,9 @@
         if (result.success) {
           showStatus('Member saved!', 'success');
           closeModal();
-          if (lastBorrowerQuery) {
-            document.getElementById('borrower-search').value = lastBorrowerQuery;
-            searchBorrowersUI();
-          } else {
-            loadBorrowers();
-          }
+          // Re-fetch the roster (data changed); the current search filter is
+          // preserved because loadBorrowers re-applies the search box value.
+          loadBorrowers();
         } else {
           restoreButton(saveBtn);
           showAlert('Unable to save', result.error || 'Failed to save member');
