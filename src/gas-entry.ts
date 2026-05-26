@@ -294,14 +294,15 @@ function getClassifications(): { value: string; label: string; prefix: boolean }
 
 /**
  * Searches all media and returns full objects with availability status (for Resources tab display).
- * Either `query` or `classification` may be empty; if both are empty the result is empty.
- * When both are provided, the text query narrows within the selected classification.
+ * Any of `query`, `classification`, or `status` may be empty; if all are empty the result is empty.
+ * Provided filters are combined (intersection): the text query, classification, and availability
+ * status each narrow the results.
  */
-function searchAllMedia(query: string, classification: string = ''): unknown[] {
+function searchAllMedia(query: string, classification: string = '', status: string = ''): unknown[] {
   const user = Session.getActiveUser().getEmail();
-  Logger.log(`[AUDIT] ${user} searched all media: query="${query}" classification="${classification}"`);
+  Logger.log(`[AUDIT] ${user} searched all media: query="${query}" classification="${classification}" status="${status}"`);
 
-  if (!query && !classification) return [];
+  if (!query && !classification && !status) return [];
 
   const mediaService = getMediaService();
   const result = mediaService.getAll();
@@ -316,7 +317,6 @@ function searchAllMedia(query: string, classification: string = ''): unknown[] {
   const hasClassification = !!classification;
 
   return data
-    .filter(item => item.barcodes)
     .filter(item => {
       if (!hasClassification) return true;
       if (classification === UNCLASSIFIED_VALUE) return !matchesAnyClassification(`${item.classification}`);
@@ -338,11 +338,17 @@ function searchAllMedia(query: string, classification: string = ''): unknown[] {
           clean[key] = value;
         }
       }
-      clean.status = item.barcodes.split('|').some((b: string) => !loanedBarcodes.includes(b.trim()))
-        ? 'available'
-        : 'on-loan';
+      const barcodeList = `${item.barcodes || ''}`.split('|').map((b: string) => b.trim()).filter(Boolean);
+      if (barcodeList.length === 0) {
+        clean.status = 'no-copies';
+      } else {
+        clean.status = barcodeList.some((b: string) => !loanedBarcodes.includes(b))
+          ? 'available'
+          : 'on-loan';
+      }
       return clean;
-    });
+    })
+    .filter(item => !status || item.status === status);
 }
 
 /**

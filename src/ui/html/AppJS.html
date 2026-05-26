@@ -220,7 +220,7 @@
       showBorrowersEmptyState();
     } else if (tabName === 'Media') {
       document.getElementById('media-tbody').innerHTML =
-        '<tr><td colspan="5" class="empty-state">Enter a search term or pick a classification to find resources</td></tr>';
+        '<tr><td colspan="5" class="empty-state">Enter a search term or pick a classification or status to find resources</td></tr>';
     } else if (tabName === 'Loans') {
       loadLoans();
     }
@@ -369,9 +369,10 @@
   function searchMediaUI() {
     var query = document.getElementById('media-search').value.trim();
     var classification = document.getElementById('media-classification').value;
-    if (!query && !classification) {
+    var status = document.getElementById('media-status').value;
+    if (!query && !classification && !status) {
       document.getElementById('media-tbody').innerHTML =
-        '<tr><td colspan="5" class="empty-state">Enter a search term or pick a classification to find resources</td></tr>';
+        '<tr><td colspan="5" class="empty-state">Enter a search term or pick a classification or status to find resources</td></tr>';
       return;
     }
     document.getElementById('media-tbody').innerHTML =
@@ -382,15 +383,16 @@
         renderMedia(allMedia);
       })
       .withFailureHandler(handleError)
-      .searchAllMedia(query, classification);
+      .searchAllMedia(query, classification, status);
   }
 
   function clearMediaSearch() {
     document.getElementById('media-search').value = '';
     document.getElementById('media-classification').value = '';
+    document.getElementById('media-status').value = '';
     allMedia = [];
     document.getElementById('media-tbody').innerHTML =
-      '<tr><td colspan="5" class="empty-state">Enter a search term or pick a classification to find resources</td></tr>';
+      '<tr><td colspan="5" class="empty-state">Enter a search term or pick a classification or status to find resources</td></tr>';
   }
 
   function showOverdueOnly() {

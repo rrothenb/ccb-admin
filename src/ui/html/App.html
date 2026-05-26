@@ -145,6 +145,7 @@
         border-radius: 9999px;
         font-size: 12px;
         font-weight: 500;
+        white-space: nowrap;
       }
 
       .status-badge.status-active,
@@ -172,7 +173,8 @@
         color: #1e40af;
       }
 
-      .status-badge.status-damaged {
+      .status-badge.status-damaged,
+      .status-badge.status-no-copies {
         background-color: #fef3c7;
         color: #92400e;
       }
@@ -421,6 +423,14 @@
                   title="Show all resources with a given classification"
                   data-tooltip="Browse all resources with a given classification">
             <option value="">All classifications</option>
+          </select>
+          <select id="media-status" onchange="searchMediaUI()"
+                  title="Show all resources with a given availability status"
+                  data-tooltip="Filter resources by availability status">
+            <option value="">All statuses</option>
+            <option value="available">Available</option>
+            <option value="on-loan">On loan</option>
+            <option value="no-copies">No copies</option>
           </select>
           <input type="text" id="media-search" placeholder="Search resources by title, author, barcode, or more..."
                  title="Search by title, author, barcode, subjects, and more"
