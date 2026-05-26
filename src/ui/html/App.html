@@ -248,6 +248,37 @@
         color: #6b7280;
       }
 
+      /* Inline spinner for in-modal actions (e.g. circulation barcode lookups) */
+      .action-spinner {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 8px;
+        color: #6b7280;
+        font-size: 13px;
+      }
+
+      .spinner {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 2px solid #d1d5db;
+        border-top-color: #4f46e5;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+        vertical-align: middle;
+      }
+
+      /* Spinner on a colored button (white text) */
+      .spinner.spinner-light {
+        border-color: rgba(255, 255, 255, 0.45);
+        border-top-color: #fff;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+
       /* Busy cursor — applied to body when server requests are pending */
       body.busy,
       body.busy * {

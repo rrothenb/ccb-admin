@@ -563,7 +563,8 @@
 
   function submitBorrower(event) {
     event.preventDefault();
-    showStatus('Saving...', 'loading');
+    var saveBtn = event.submitter || event.target.querySelector('button[type="submit"]');
+    setButtonLoading(saveBtn, 'Saving…');
 
     var data = {
       id: document.getElementById('b-id').value || undefined,
@@ -588,10 +589,14 @@
             searchBorrowersUI();
           }
         } else {
-          showStatus(result.error || 'Failed to save member', 'error');
+          restoreButton(saveBtn);
+          showAlert('Unable to save', result.error || 'Failed to save member');
         }
       })
-      .withFailureHandler(handleError)
+      .withFailureHandler(function (error) {
+        restoreButton(saveBtn);
+        handleError(error);
+      })
       .saveBorrower(data);
   }
 
@@ -759,7 +764,7 @@
         '<input type="hidden" id="m-id" value="' + media.id + '">' +
         '<div style="display:flex;gap:8px;margin-top:8px">' +
         '<button type="submit" class="btn btn-primary">Save Resource</button>' +
-        '<button type="button" class="btn btn-danger" onclick="confirmDeleteMedia(\'' + media.id + '\')">Delete</button>' +
+        '<button type="button" id="m-delete-btn" class="btn btn-danger" onclick="confirmDeleteMedia(\'' + media.id + '\')">Delete</button>' +
         '</div>' +
         '</form>'
     );
@@ -798,7 +803,8 @@
 
   function submitMedia(event) {
     event.preventDefault();
-    showStatus('Saving...', 'loading');
+    var saveBtn = event.submitter || event.target.querySelector('button[type="submit"]');
+    setButtonLoading(saveBtn, 'Saving…');
 
     var data = {
       id: document.getElementById('m-id').value || undefined,
@@ -817,10 +823,14 @@
           closeModal();
           searchMediaUI();
         } else {
-          showStatus(result.error || 'Failed to save resource', 'error');
+          restoreButton(saveBtn);
+          showAlert('Unable to save', result.error || 'Failed to save resource');
         }
       })
-      .withFailureHandler(handleError)
+      .withFailureHandler(function (error) {
+        restoreButton(saveBtn);
+        handleError(error);
+      })
       .saveMedia(data);
   }
 
@@ -832,7 +842,8 @@
       'Delete "' + title + '"? This permanently removes the resource from the catalog and cannot be undone. Any overdue (never-returned) loan for it will also be deleted.',
       'Delete',
       function () {
-        showStatus('Deleting...', 'loading');
+        var deleteBtn = document.getElementById('m-delete-btn');
+        setButtonLoading(deleteBtn, 'Deleting…');
         google.script.run
           .withSuccessHandler(function (result) {
             if (result.success) {
@@ -840,10 +851,12 @@
               closeModal();
               searchMediaUI();
             } else {
+              restoreButton(deleteBtn);
               showAlert('Unable to delete', result.error || 'Failed to delete resource');
             }
           })
           .withFailureHandler(function (err) {
+            restoreButton(deleteBtn);
             showAlert('Unable to delete', (err && err.message) || String(err));
           })
           .deleteMedia(id);
@@ -972,6 +985,7 @@
       '<label for="co-barcode">Barcode — scan or type then press Enter</label>' +
       '<input type="text" id="co-barcode" placeholder="Scan barcode..." autocomplete="off" style="font-size:16px;font-weight:600" title="Scan or type a barcode, then press Enter to check out">' +
       '</div>' +
+      '<div id="co-spinner" class="action-spinner" style="display:none"><span class="spinner"></span><span class="spinner-text"></span></div>' +
       '<div id="co-items-section" style="display:none;margin-top:16px">' +
       '<p style="font-size:13px;font-weight:600;color:#374151;margin-bottom:8px">Checked Out This Session</p>' +
       '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead>' +
@@ -1069,9 +1083,11 @@
     if (!barcode) return;
 
     barcodeField.disabled = true;
+    showActionSpinner('co-spinner', 'Checking out…');
 
     google.script.run
       .withSuccessHandler(function (result) {
+        hideActionSpinner('co-spinner');
         barcodeField.disabled = false;
         barcodeField.value = '';
         barcodeField.focus();
@@ -1091,6 +1107,7 @@
         }
       })
       .withFailureHandler(function (error) {
+        hideActionSpinner('co-spinner');
         barcodeField.disabled = false;
         barcodeField.value = '';
         barcodeField.focus();
@@ -1105,6 +1122,7 @@
       '<label for="ret-barcode">Barcode — scan or type then press Enter</label>' +
       '<input type="text" id="ret-barcode" placeholder="Scan barcode..." autocomplete="off" style="font-size:16px;font-weight:600" title="Scan or type a barcode, then press Enter to return it">' +
       '</div>' +
+      '<div id="ret-spinner" class="action-spinner" style="display:none"><span class="spinner"></span><span class="spinner-text"></span></div>' +
       '<div id="ret-items-section" style="display:none;margin-top:16px">' +
       '<p style="font-size:13px;font-weight:600;color:#374151;margin-bottom:8px">Returned This Session</p>' +
       '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead>' +
@@ -1138,9 +1156,11 @@
     if (!barcode) return;
 
     barcodeField.disabled = true;
+    showActionSpinner('ret-spinner', 'Returning…');
 
     google.script.run
       .withSuccessHandler(function (result) {
+        hideActionSpinner('ret-spinner');
         barcodeField.disabled = false;
         barcodeField.value = '';
         barcodeField.focus();
@@ -1159,6 +1179,7 @@
         }
       })
       .withFailureHandler(function (error) {
+        hideActionSpinner('ret-spinner');
         barcodeField.disabled = false;
         barcodeField.value = '';
         barcodeField.focus();
@@ -1177,6 +1198,7 @@
       '<label for="ext-barcode">Barcode — scan or type then press Enter</label>' +
       '<input type="text" id="ext-barcode" placeholder="Scan barcode..." autocomplete="off" style="font-size:16px;font-weight:600" title="Scan or type a barcode, then press Enter to extend it">' +
       '</div>' +
+      '<div id="ext-spinner" class="action-spinner" style="display:none"><span class="spinner"></span><span class="spinner-text"></span></div>' +
       '<div id="ext-items-section" style="display:none;margin-top:16px">' +
       '<p style="font-size:13px;font-weight:600;color:#374151;margin-bottom:8px">Extended This Session</p>' +
       '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead>' +
@@ -1211,9 +1233,11 @@
     if (!barcode) return;
 
     barcodeField.disabled = true;
+    showActionSpinner('ext-spinner', 'Extending…');
 
     google.script.run
       .withSuccessHandler(function (result) {
+        hideActionSpinner('ext-spinner');
         barcodeField.disabled = false;
         barcodeField.value = '';
         barcodeField.focus();
@@ -1232,6 +1256,7 @@
         }
       })
       .withFailureHandler(function (error) {
+        hideActionSpinner('ext-spinner');
         barcodeField.disabled = false;
         barcodeField.value = '';
         barcodeField.focus();
@@ -1255,6 +1280,40 @@
     if (typeof text == 'number') return text;
     if (!text || typeof text !== 'string') return '';
     return text.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // Toggles an inline spinner (markup: <div id=".." class="action-spinner">
+  // <span class="spinner"></span><span class="spinner-text"></span></div>).
+  function showActionSpinner(id, message) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    var text = el.querySelector('.spinner-text');
+    if (text) text.textContent = message || 'Working…';
+    el.style.display = 'flex';
+  }
+
+  function hideActionSpinner(id) {
+    var el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  }
+
+  // Puts a button into a loading state (spinner + label) and disables it; used
+  // for modal Save/Delete actions whose status message would otherwise sit
+  // hidden behind the modal overlay. Pair with restoreButton() on completion.
+  function setButtonLoading(btn, message) {
+    if (!btn) return;
+    if (btn.dataset.originalHtml == null) btn.dataset.originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner spinner-light"></span> ' + escapeHtml(message || 'Working…');
+  }
+
+  function restoreButton(btn) {
+    if (!btn) return;
+    btn.disabled = false;
+    if (btn.dataset.originalHtml != null) {
+      btn.innerHTML = btn.dataset.originalHtml;
+      delete btn.dataset.originalHtml;
+    }
   }
 
   function showErrorDialog(message) {
