@@ -11,6 +11,7 @@
   let showingOverdueOnly = false;
   let lastBorrowerQuery = '';
   let borrowerSort = { key: 'name', dir: 'asc' };
+  let loanSort = { key: 'dueDate', dir: 'desc' };
   let classificationOptions = [];
   const UNCLASSIFIED_VALUE = '__UNCLASSIFIED__';
 
@@ -260,14 +261,14 @@
 
   function loadLoans() {
     document.getElementById('loans-tbody').innerHTML =
-      '<tr><td colspan="6" class="loading">Loading...</td></tr>';
+      '<tr><td colspan="7" class="loading">Loading...</td></tr>';
 
     showingOverdueOnly = false;
 
     google.script.run
       .withSuccessHandler(function (loans) {
         allLoans = loans || [];
-        renderLoans(allLoans);
+        applyLoanFilters();
       })
       .withFailureHandler(handleError)
       .getActiveLoans();
@@ -353,6 +354,37 @@
     el.className = 'sort-indicator' + (active ? ' active' : '');
   }
 
+  function compareLoans(a, b) {
+    var dir = loanSort.dir === 'desc' ? -1 : 1;
+    var key = loanSort.key;
+    if (key === 'checkoutDate' || key === 'dueDate') {
+      var ta = parseDateValue(a[key]);
+      var tb = parseDateValue(b[key]);
+      if (ta !== tb) return (ta < tb ? -1 : 1) * dir;
+      return (a.borrowerName || '').localeCompare(b.borrowerName || '');
+    }
+    return (a[key] || '').toString().localeCompare((b[key] || '').toString()) * dir;
+  }
+
+  function sortLoans(key) {
+    if (loanSort.key === key) {
+      loanSort.dir = loanSort.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      loanSort.key = key;
+      // Dates default newest-first; text columns default A→Z.
+      loanSort.dir = (key === 'checkoutDate' || key === 'dueDate') ? 'desc' : 'asc';
+    }
+    applyLoanFilters();
+  }
+
+  function updateLoanSortIndicators() {
+    var arrow = loanSort.dir === 'asc' ? '▲' : '▼';
+    setSortIndicator('#th-loan-borrower .sort-indicator', loanSort.key === 'borrowerName', arrow);
+    setSortIndicator('#th-loan-title .sort-indicator', loanSort.key === 'title', arrow);
+    setSortIndicator('#th-loan-checkout .sort-indicator', loanSort.key === 'checkoutDate', arrow);
+    setSortIndicator('#th-loan-due .sort-indicator', loanSort.key === 'dueDate', arrow);
+  }
+
   function renderMedia(media) {
     var tbody = document.getElementById('media-tbody');
 
@@ -381,19 +413,23 @@
 
   function renderLoans(loans) {
     var tbody = document.getElementById('loans-tbody');
+    updateLoanSortIndicators();
 
     if (!loans || loans.length === 0) {
+      var searchEl = document.getElementById('loan-search');
+      var hasQuery = searchEl && searchEl.value.trim();
+      var message = hasQuery
+        ? 'No matching loans'
+        : (showingOverdueOnly ? 'No overdue loans' : 'No active loans');
       tbody.innerHTML =
-        '<tr><td colspan="6" class="empty-state">' +
-        (showingOverdueOnly ? 'No overdue loans' : 'No active loans') +
-        '</td></tr>';
+        '<tr><td colspan="7" class="empty-state">' + message + '</td></tr>';
       return;
     }
 
     var today = new Date();
     today.setHours(0, 0, 0, 0);
     tbody.innerHTML = loans
-      .sort((a, b) => new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime())
+      .slice().sort(compareLoans)
       .map(function (l) {
         var status = new Date(l.dueDate) < today ? 'overdue' : 'active';
         return (
@@ -455,17 +491,39 @@
 
   function showOverdueOnly() {
     showingOverdueOnly = true;
-    var today = new Date();
-    today.setHours(0, 0, 0, 0);
-    var filtered = allLoans.filter(function (l) {
-      return new Date(l.dueDate) < today;
-    });
-    renderLoans(filtered);
+    applyLoanFilters();
   }
 
   function showAllLoans() {
     showingOverdueOnly = false;
-    renderLoans(allLoans);
+    applyLoanFilters();
+  }
+
+  function searchLoansUI() {
+    applyLoanFilters();
+  }
+
+  function clearLoanSearch() {
+    document.getElementById('loan-search').value = '';
+    applyLoanFilters();
+  }
+
+  // Renders active loans through the overdue toggle and the search box (member
+  // name/ID, resource title, or barcode — substring, case-insensitive), all
+  // client-side. renderLoans applies the current sort.
+  function applyLoanFilters() {
+    var query = document.getElementById('loan-search').value.trim().toLowerCase();
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+    var filtered = allLoans.filter(function (l) {
+      if (showingOverdueOnly && !(new Date(l.dueDate) < today)) return false;
+      if (!query) return true;
+      return (l.borrowerName || '').toLowerCase().indexOf(query) !== -1 ||
+             (l.borrowerId || '').toLowerCase().indexOf(query) !== -1 ||
+             (l.title || '').toLowerCase().indexOf(query) !== -1 ||
+             (l.barcode || '').toLowerCase().indexOf(query) !== -1;
+    });
+    renderLoans(filtered);
   }
 
   // ============================================================================
