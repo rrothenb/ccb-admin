@@ -499,6 +499,13 @@
       </div>
     </div>
 
+    <!-- Confirm / alert dialog (stacks above the main modal) -->
+    <div id="dialog-overlay" class="modal-overlay" style="z-index: 1100" onclick="closeDialogOnOverlay(event)">
+      <div class="modal-content" id="dialog-content" style="max-width: 420px">
+        <!-- Dialog content loaded dynamically -->
+      </div>
+    </div>
+
     <?!= include('AppJS'); ?>
   </body>
 </html>

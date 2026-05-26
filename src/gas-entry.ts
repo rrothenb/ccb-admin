@@ -19,7 +19,7 @@ import { getBorrowerService } from './services/borrowers';
 import { getMediaService, CLASSIFICATIONS, classificationMatches, matchesAnyClassification, UNCLASSIFIED_VALUE, ClassificationOption } from './services/media';
 import { getLoanService } from './services/loans';
 import { writeAuditLog, setAuditLogSpreadsheetId, getAuditLogSpreadsheetId } from './services/audit-log';
-import { Media } from './types';
+import { Media, Loan } from './types';
 
 /**
  * If `barcode` (one of `media`'s own copies) is assigned to a parent box via
@@ -390,6 +390,59 @@ function saveMedia(mediaData: {
   }
 }
 
+/**
+ * Deletes a media item by ID. Outstanding loans for the resource are handled by
+ * due date: overdue loans (the resource was checked out and never returned) are
+ * deleted along with the resource, but a copy that is still out and not yet due
+ * blocks deletion so we never discard a loan the borrower will return.
+ */
+function deleteMedia(id: string): { success: boolean; error?: string } {
+  const user = Session.getActiveUser().getEmail();
+
+  const service = getMediaService();
+  const existing = service.getById(id);
+  if (!existing.success || !existing.data) {
+    return { success: false, error: 'Resource not found' };
+  }
+  const media = existing.data;
+
+  const barcodes = `${media.barcodes ?? ''}`.split('|').map(b => b.trim()).filter(Boolean);
+  let overdueLoans: Loan[] = [];
+  if (barcodes.length) {
+    const loanService = getLoanService();
+    const loanResult = loanService.getAll();
+    const loans = (loanResult.success && loanResult.data ? loanResult.data : [])
+      .filter(l => barcodes.includes(l.barcode));
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    overdueLoans = loans.filter(l => new Date(l.dueDate) < today);
+    const currentLoans = loans.filter(l => new Date(l.dueDate) >= today);
+
+    if (currentLoans.length) {
+      const plural = currentLoans.length === 1;
+      return {
+        success: false,
+        error: `Cannot delete "${media.title}" — ${currentLoans.length} ${plural ? 'copy is' : 'copies are'} currently on loan and not yet due. Return ${plural ? 'it' : 'them'} first.`,
+      };
+    }
+
+    // Cascade-delete overdue loans (the never-returned scenario) so deleting the
+    // resource doesn't leave orphaned loan rows.
+    for (const loan of overdueLoans) {
+      const delResult = loanService.delete(loan.id);
+      if (!delResult.success) {
+        return { success: false, error: `Failed to remove overdue loan for barcode ${loan.barcode}: ${delResult.error}` };
+      }
+      writeAuditLog(user, `deleted overdue loan during resource deletion: "${media.title}" (barcode=${loan.barcode}, loan=${loan.id}, borrower=${loan.borrowerName})`);
+    }
+  }
+
+  writeAuditLog(user, `deleted media: ${media.title} (ID: ${id})`);
+  const result = service.delete(id);
+  return { success: result.success, error: result.error };
+}
+
 // ============================================================================
 // LOAN FUNCTIONS (called from client-side JS)
 // ============================================================================
@@ -622,6 +675,7 @@ function extendLoanByBarcode(barcode: string, days: number = 21): { success: boo
 (globalThis as Record<string, unknown>).searchAllMedia = searchAllMedia;
 (globalThis as Record<string, unknown>).getClassifications = getClassifications;
 (globalThis as Record<string, unknown>).saveMedia = saveMedia;
+(globalThis as Record<string, unknown>).deleteMedia = deleteMedia;
 
 // Loan functions
 (globalThis as Record<string, unknown>).getActiveLoans = getActiveLoans;

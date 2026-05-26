@@ -436,6 +436,47 @@
     }
   }
 
+  // In-app confirm/alert dialogs (replaces native confirm()/alert(), which in a
+  // sandboxed iframe render an ugly "An embedded page at … says" prompt).
+  function showConfirm(title, message, confirmLabel, onConfirm) {
+    document.getElementById('dialog-content').innerHTML =
+      '<div class="modal-header"><h2>' + escapeHtml(title) + '</h2>' +
+      '<button class="modal-close" onclick="closeDialog()">&times;</button></div>' +
+      '<div class="modal-body">' +
+      '<p style="margin:0 0 20px">' + escapeHtml(message) + '</p>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end">' +
+      '<button class="btn btn-secondary" onclick="closeDialog()">Cancel</button>' +
+      '<button class="btn btn-danger" id="dialog-confirm-btn">' + escapeHtml(confirmLabel || 'OK') + '</button>' +
+      '</div></div>';
+    document.getElementById('dialog-overlay').classList.add('active');
+    document.getElementById('dialog-confirm-btn').onclick = function () {
+      closeDialog();
+      if (onConfirm) onConfirm();
+    };
+  }
+
+  function showAlert(title, message) {
+    document.getElementById('dialog-content').innerHTML =
+      '<div class="modal-header"><h2>' + escapeHtml(title) + '</h2>' +
+      '<button class="modal-close" onclick="closeDialog()">&times;</button></div>' +
+      '<div class="modal-body">' +
+      '<p style="margin:0 0 20px">' + escapeHtml(message) + '</p>' +
+      '<div style="display:flex;justify-content:flex-end">' +
+      '<button class="btn btn-primary" onclick="closeDialog()">OK</button>' +
+      '</div></div>';
+    document.getElementById('dialog-overlay').classList.add('active');
+  }
+
+  function closeDialog() {
+    document.getElementById('dialog-overlay').classList.remove('active');
+  }
+
+  function closeDialogOnOverlay(event) {
+    if (event.target.id === 'dialog-overlay') {
+      closeDialog();
+    }
+  }
+
   // ============================================================================
   // BORROWER ACTIONS
   // ============================================================================
@@ -716,7 +757,10 @@
       insideBoxHtml +
       renderBoxContentsHtml(contents, ownBarcodes.length > 1) +
         '<input type="hidden" id="m-id" value="' + media.id + '">' +
+        '<div style="display:flex;gap:8px;margin-top:8px">' +
         '<button type="submit" class="btn btn-primary">Save Resource</button>' +
+        '<button type="button" class="btn btn-danger" onclick="confirmDeleteMedia(\'' + media.id + '\')">Delete</button>' +
+        '</div>' +
         '</form>'
     );
     if (!isBox) wireBoxRowRefresh();
@@ -778,6 +822,33 @@
       })
       .withFailureHandler(handleError)
       .saveMedia(data);
+  }
+
+  function confirmDeleteMedia(id) {
+    var media = allMedia.find(function (m) { return m.id == id; });
+    var title = media ? media.title : 'this resource';
+    showConfirm(
+      'Delete resource',
+      'Delete "' + title + '"? This permanently removes the resource from the catalog and cannot be undone. Any overdue (never-returned) loan for it will also be deleted.',
+      'Delete',
+      function () {
+        showStatus('Deleting...', 'loading');
+        google.script.run
+          .withSuccessHandler(function (result) {
+            if (result.success) {
+              showStatus('Resource deleted', 'success');
+              closeModal();
+              searchMediaUI();
+            } else {
+              showAlert('Unable to delete', result.error || 'Failed to delete resource');
+            }
+          })
+          .withFailureHandler(function (err) {
+            showAlert('Unable to delete', (err && err.message) || String(err));
+          })
+          .deleteMedia(id);
+      }
+    );
   }
 
   var borrowerSearchTimeout = null;
