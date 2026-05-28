@@ -6,6 +6,7 @@
  */
 
 import { SheetName } from '../types';
+import { writeAuditLog } from '../services/audit-log';
 
 /**
  * Main entry point for the web app
@@ -21,12 +22,16 @@ function doGet(): GoogleAppsScript.HTML.HtmlOutput {
 }
 
 /**
- * Gets the current app context for the client
+ * Gets the current app context for the client. Called once per page load, so
+ * we also use it as the "session started" hook for the audit log — one entry
+ * per visit, keeping the log lean.
  */
 function getAppContext(): { view: SheetName; userEmail: string } {
+  const userEmail = Session.getActiveUser().getEmail();
+  writeAuditLog(userEmail, 'opened CCB Library Admin');
   return {
     view: 'Borrowers', // Default view
-    userEmail: Session.getActiveUser().getEmail(),
+    userEmail,
   };
 }
 
