@@ -60,9 +60,13 @@ export const CLASSIFICATIONS: ClassificationOption[] = [
 ];
 
 /**
- * Sentinel browse value for "show everything that matches none of the curated
- * classifications" (blanks, shelf codes, typos). Not an assignable classification.
+ * Sentinel browse values used by the Resources search dropdown.
+ * - NONE_VALUE: classification is literally blank.
+ * - UNCLASSIFIED_VALUE: classification is non-blank but matches none of the
+ *   curated entries (shelf codes, typos, removed entries).
+ * Neither is an assignable classification.
  */
+export const NONE_VALUE = '__NONE__';
 export const UNCLASSIFIED_VALUE = '__UNCLASSIFIED__';
 
 /**

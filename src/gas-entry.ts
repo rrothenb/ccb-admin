@@ -16,7 +16,7 @@ import {
 import { doGet, getAppContext, include } from './ui/webapp';
 
 import { getBorrowerService } from './services/borrowers';
-import { getMediaService, CLASSIFICATIONS, classificationMatches, matchesAnyClassification, UNCLASSIFIED_VALUE, ClassificationOption } from './services/media';
+import { getMediaService, CLASSIFICATIONS, classificationMatches, matchesAnyClassification, NONE_VALUE, UNCLASSIFIED_VALUE, ClassificationOption } from './services/media';
 import { getLoanService } from './services/loans';
 import { writeAuditLog, setAuditLogSpreadsheetId, getAuditLogSpreadsheetId } from './services/audit-log';
 import { Media, Loan } from './types';
@@ -332,8 +332,10 @@ function searchAllMedia(query: string, classification: string = '', status: stri
   return data
     .filter(item => {
       if (!hasClassification) return true;
-      if (classification === UNCLASSIFIED_VALUE) return !matchesAnyClassification(`${item.classification}`);
-      return classificationMatches(`${item.classification}`, classification);
+      const itemCls = `${item.classification || ''}`.trim();
+      if (classification === NONE_VALUE) return itemCls === '';
+      if (classification === UNCLASSIFIED_VALUE) return itemCls !== '' && !matchesAnyClassification(itemCls);
+      return classificationMatches(itemCls, classification);
     })
     .filter(item =>
       !hasQuery ||

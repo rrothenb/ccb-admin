@@ -13,6 +13,7 @@
   let borrowerSort = { key: 'name', dir: 'asc' };
   let loanSort = { key: 'dueDate', dir: 'desc' };
   let classificationOptions = [];
+  const NONE_VALUE = '__NONE__';
   const UNCLASSIFIED_VALUE = '__UNCLASSIFIED__';
 
   // ============================================================================
@@ -122,20 +123,40 @@
     loadClassifications();
   });
 
+  // Disabled <option> that acts as a visual divider in a <select>.
+  function makeDividerOption() {
+    var d = document.createElement('option');
+    d.disabled = true;
+    d.textContent = '──────────';
+    return d;
+  }
+
   function loadClassifications() {
     google.script.run
       .withSuccessHandler(function (classifications) {
         classificationOptions = classifications || [];
         var select = document.getElementById('media-classification');
         if (!select) return;
+        // Layout (matches the edit modal): the canonical block sits between
+        // dividers, with the "All classifications" wildcard above and the
+        // browse-only "Unclassified / Other" sentinel below.
+        select.appendChild(makeDividerOption());
+        // Truly-blank classification (item.classification === ''). Sits at the
+        // top of the canonical block, mirroring the edit dropdown.
+        var none = document.createElement('option');
+        none.value = NONE_VALUE;
+        none.textContent = '(none)';
+        select.appendChild(none);
         for (var i = 0; i < classificationOptions.length; i++) {
           var opt = document.createElement('option');
           opt.value = classificationOptions[i].value;
           opt.textContent = classificationOptions[i].label;
           select.appendChild(opt);
         }
-        // Browse-only pseudo-classification: everything matching none of the curated
-        // entries. Kept out of classificationOptions so it never appears in the edit modal.
+        select.appendChild(makeDividerOption());
+        // Browse-only pseudo-classification: has a value but matches none of the
+        // curated entries. Kept out of classificationOptions so it never appears
+        // in the edit modal.
         var unclassified = document.createElement('option');
         unclassified.value = UNCLASSIFIED_VALUE;
         unclassified.textContent = 'Unclassified / Other';
@@ -171,10 +192,14 @@
       }
     }
     var html = '<select id="m-classification">';
-    html += '<option value=""' + (!cur ? ' selected' : '') + '>(none)</option>';
+    // When the existing value doesn't match any curated entry, surface it at the
+    // very top (selected) with a divider underneath so it's obviously the odd one
+    // out — not a regular pick the user might accidentally re-select elsewhere.
     if (cur && !matched) {
       html += '<option value="' + escapeAttr(cur) + '" selected>' + escapeHtml(cur) + ' (current)</option>';
+      html += '<option disabled>──────────</option>';
     }
+    html += '<option value=""' + (!cur ? ' selected' : '') + '>(none)</option>';
     for (var j = 0; j < classificationOptions.length; j++) {
       var o = classificationOptions[j];
       var sel = (matched && o.value === matched.value) ? ' selected' : '';
