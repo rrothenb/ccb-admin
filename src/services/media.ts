@@ -48,7 +48,6 @@ export const CLASSIFICATIONS: ClassificationOption[] = [
   { value: 'ELT Resource Magazine', label: 'ELT Resource Magazine' },
   { value: 'English Course', label: 'English Course', prefix: true },
   { value: 'FAN', label: 'FAN' },
-  { value: 'Fiction Short stories', label: 'Fiction Short stories' },
   { value: 'FSS', label: 'FSS' },
   { value: 'GEN', label: 'GEN' },
   { value: 'HF', label: 'HF' },
