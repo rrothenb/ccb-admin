@@ -1056,10 +1056,14 @@
 
   function findUniqueBarcodeMatch(prefix) {
     if (!prefix || prefix.length < 6 || !allBarcodes || !allBarcodes.length) return null;
+    // Case-insensitive prefix match; the caller substitutes the canonical-cased
+    // barcode (from allBarcodes) back into the field, so the submitted value
+    // matches what the catalog stores.
+    var lowerPrefix = prefix.toLowerCase();
     var match = null;
     for (var i = 0; i < allBarcodes.length; i++) {
       var bc = allBarcodes[i];
-      if (bc.length >= prefix.length && bc.indexOf(prefix) === 0) {
+      if (bc.length >= prefix.length && bc.toLowerCase().indexOf(lowerPrefix) === 0) {
         if (match !== null) return null;
         match = bc;
       }

@@ -551,11 +551,15 @@ function checkoutByBarcode(
     return { success: false, error: 'Could not load resources' };
   }
 
+  const target = barcode.toLowerCase();
   let foundMedia = null;
+  let canonicalBarcode = barcode;
   for (const item of allMedia.data) {
     const barcodes = (item.barcodes || '').split('|').map((b: string) => b.trim());
-    if (barcodes.includes(barcode)) {
+    const hit = barcodes.find((b) => b.toLowerCase() === target);
+    if (hit) {
       foundMedia = item;
+      canonicalBarcode = hit;
       break;
     }
   }
@@ -564,18 +568,18 @@ function checkoutByBarcode(
     return { success: false, error: `Barcode ${barcode} not found in catalog` };
   }
 
-  const containing = findContainingBox(foundMedia, barcode, allMedia.data);
+  const containing = findContainingBox(foundMedia, canonicalBarcode, allMedia.data);
   if (containing) {
     return {
       success: false,
-      error: `"${foundMedia.title}" (${barcode}) is inside box "${containing.boxTitle}" (${containing.boxBarcode}). Check out the box instead.`,
+      error: `"${foundMedia.title}" (${canonicalBarcode}) is inside box "${containing.boxTitle}" (${containing.boxBarcode}). Check out the box instead.`,
     };
   }
 
   const loanService = getLoanService();
-  const result = loanService.checkout(borrowerId, barcode, foundMedia.id, borrowerName, foundMedia.title, loanDays);
+  const result = loanService.checkout(borrowerId, canonicalBarcode, foundMedia.id, borrowerName, foundMedia.title, loanDays);
   if (result.success) {
-    writeAuditLog(user, `checked out "${foundMedia.title}" (barcode=${barcode}) to ${borrowerName} (borrower=${borrowerId}) for ${loanDays} days`);
+    writeAuditLog(user, `checked out "${foundMedia.title}" (barcode=${canonicalBarcode}) to ${borrowerName} (borrower=${borrowerId}) for ${loanDays} days`);
     return { success: true, title: foundMedia.title };
   }
   return { success: false, error: result.error };
@@ -593,7 +597,8 @@ function returnLoanByBarcode(barcode: string): { success: boolean; title?: strin
     return { success: false, error: 'Could not load loans' };
   }
 
-  const loan = allLoans.data.find((l) => l.barcode === barcode);
+  const target = barcode.toLowerCase();
+  const loan = allLoans.data.find((l) => (l.barcode || '').toLowerCase() === target);
   if (!loan) {
     return { success: false, error: `No active loan found for barcode ${barcode}` };
   }
@@ -601,14 +606,14 @@ function returnLoanByBarcode(barcode: string): { success: boolean; title?: strin
   const allMedia = getMediaService().getAll();
   if (allMedia.success && allMedia.data) {
     const owningMedia = allMedia.data.find((m) =>
-      (m.barcodes || '').split('|').map((b) => b.trim()).includes(barcode)
+      (m.barcodes || '').split('|').map((b) => b.trim().toLowerCase()).includes(target)
     );
     if (owningMedia) {
-      const containing = findContainingBox(owningMedia, barcode, allMedia.data);
+      const containing = findContainingBox(owningMedia, loan.barcode, allMedia.data);
       if (containing) {
         return {
           success: false,
-          error: `"${loan.title}" (${barcode}) is inside box "${containing.boxTitle}" (${containing.boxBarcode}). Return the box instead.`,
+          error: `"${loan.title}" (${loan.barcode}) is inside box "${containing.boxTitle}" (${containing.boxBarcode}). Return the box instead.`,
         };
       }
     }
@@ -616,7 +621,7 @@ function returnLoanByBarcode(barcode: string): { success: boolean; title?: strin
 
   const returnResult = service.processReturn(loan.id);
   if (returnResult.success) {
-    writeAuditLog(user, `returned "${loan.title}" (barcode=${barcode}) from ${loan.borrowerName}`);
+    writeAuditLog(user, `returned "${loan.title}" (barcode=${loan.barcode}) from ${loan.borrowerName}`);
     return { success: true, title: loan.title, borrowerName: loan.borrowerName };
   }
   return { success: false, error: returnResult.error };
@@ -638,21 +643,22 @@ function extendLoanByBarcode(barcode: string, days: number = 21): { success: boo
   if (!allMedia.success || !allMedia.data) {
     return { success: false, error: 'Could not load resources' };
   }
+  const target = barcode.toLowerCase();
   const knownBarcode = allMedia.data.some((m) =>
-    (m.barcodes || '').split('|').map((b) => b.trim()).includes(barcode)
+    (m.barcodes || '').split('|').map((b) => b.trim().toLowerCase()).includes(target)
   );
   if (!knownBarcode) {
     return { success: false, error: `Barcode ${barcode} not found in catalog` };
   }
 
-  const loan = allLoans.data.find((l) => l.barcode === barcode);
+  const loan = allLoans.data.find((l) => (l.barcode || '').toLowerCase() === target);
   if (!loan) {
     return { success: false, error: `Barcode ${barcode} is not currently checked out` };
   }
 
   const extendResult = service.extendLoan(loan.id, days);
   if (extendResult.success) {
-    writeAuditLog(user, `extended "${loan.title}" (barcode=${barcode}) by ${days} days`);
+    writeAuditLog(user, `extended "${loan.title}" (barcode=${loan.barcode}) by ${days} days`);
     return { success: true, title: loan.title, newDueDate: extendResult.data?.dueDate };
   }
   return { success: false, error: extendResult.error };
