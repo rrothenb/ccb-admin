@@ -597,6 +597,7 @@
   }
 
   function showAlert(title, message) {
+    reportUserError(message);
     document.getElementById('dialog-content').innerHTML =
       '<div class="modal-header"><h2>' + escapeHtml(title) + '</h2>' +
       '<button class="modal-close" onclick="closeDialog()">&times;</button></div>' +
@@ -606,6 +607,21 @@
       '<button class="btn btn-primary" onclick="closeDialog()">OK</button>' +
       '</div></div>';
     document.getElementById('dialog-overlay').classList.add('active');
+  }
+
+  // Best-effort audit-log entry for every error surfaced to the user. Sent
+  // .quiet() so it doesn't trigger the busy cursor, and wrapped in try/catch
+  // so logging can never break the UX.
+  function reportUserError(message) {
+    if (!message) return;
+    try {
+      google.script.run
+        .withFailureHandler(function () {})
+        .quiet()
+        .logUserError(String(message));
+    } catch (e) {
+      // ignore — logging is best-effort
+    }
   }
 
   function closeDialog() {
@@ -1218,6 +1234,7 @@
         errEl.textContent = 'Please select a member first.';
         errEl.style.display = 'block';
       }
+      reportUserError('Please select a member first.');
       barcodeField.value = '';
       document.getElementById('co-member-search').focus();
       return;
@@ -1461,6 +1478,7 @@
   }
 
   function showErrorDialog(message) {
+    reportUserError(message);
     showModal(
       'Error',
       '<p style="white-space:pre-wrap;margin:0 0 16px 0">' + escapeHtml(message) + '</p>' +
@@ -1469,6 +1487,7 @@
   }
 
   function showStatus(message, type) {
+    if (type === 'error') reportUserError(message);
     var statusArea = document.getElementById('status-area');
     statusArea.textContent = message;
     statusArea.className = 'status-area ' + type;
@@ -1484,6 +1503,9 @@
     console.error(error);
     var msg = error.message || 'An error occurred';
     if (msg.indexOf('Access denied') !== -1) {
+      // showStatus would otherwise log this; the access-denied branch goes
+      // straight to showModal, so report it explicitly here.
+      reportUserError(msg);
       showModal(
         'Access Denied',
         '<p>' + escapeHtml(msg) + '</p>' +

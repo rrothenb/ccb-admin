@@ -664,6 +664,18 @@ function extendLoanByBarcode(barcode: string, days: number = 21): { success: boo
   return { success: false, error: extendResult.error };
 }
 
+/**
+ * Records an error message that was shown to a user. Called from the client's
+ * error-display helpers (showAlert / showStatus / showErrorDialog / handleError)
+ * so the audit log captures every surfaced mistake — useful for spotting which
+ * actions confuse users.
+ */
+function logUserError(message: string): void {
+  const user = Session.getActiveUser().getEmail();
+  const trimmed = `${message || ''}`.slice(0, 500);
+  writeAuditLog(user, `error shown to user: ${trimmed}`);
+}
+
 // ============================================================================
 // EXPOSE GLOBAL FUNCTIONS
 // ============================================================================
@@ -682,6 +694,7 @@ function extendLoanByBarcode(barcode: string, days: number = 21): { success: boo
 (globalThis as Record<string, unknown>).backfillMediaIds = backfillMediaIds;
 (globalThis as Record<string, unknown>).setAuditLogSpreadsheetId = setAuditLogSpreadsheetId;
 (globalThis as Record<string, unknown>).getAuditLogSpreadsheetId = getAuditLogSpreadsheetId;
+(globalThis as Record<string, unknown>).logUserError = logUserError;
 
 // Borrower functions
 (globalThis as Record<string, unknown>).getAllBorrowers = getAllBorrowers;
