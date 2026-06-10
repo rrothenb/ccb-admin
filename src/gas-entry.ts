@@ -542,7 +542,7 @@ function checkoutByBarcode(
   barcode: string,
   borrowerName: string,
   loanDays: number = 21
-): { success: boolean; title?: string; error?: string } {
+): { success: boolean; title?: string; notFound?: boolean; error?: string } {
   const user = Session.getActiveUser().getEmail();
 
   const mediaService = getMediaService();
@@ -565,7 +565,9 @@ function checkoutByBarcode(
   }
 
   if (!foundMedia) {
-    return { success: false, error: `Barcode ${barcode} not found in catalog` };
+    // `notFound` lets the client fall back to a check-out-by-name title search
+    // (the scanned/typed text wasn't a barcode, so treat it as a title).
+    return { success: false, notFound: true, error: `Barcode ${barcode} not found in catalog` };
   }
 
   const containing = findContainingBox(foundMedia, canonicalBarcode, allMedia.data);
@@ -581,6 +583,91 @@ function checkoutByBarcode(
   if (result.success) {
     writeAuditLog(user, `checked out "${foundMedia.title}" (barcode=${canonicalBarcode}) to ${borrowerName} (borrower=${borrowerId}) for ${loanDays} days`);
     return { success: true, title: foundMedia.title };
+  }
+  return { success: false, error: result.error };
+}
+
+/**
+ * Searches the catalog for resources to check out by name, for the Checkout
+ * session's "no barcode in hand" fallback. Returns resources grouped by title
+ * with a count of how many copies are currently available.
+ */
+function findAvailableForCheckout(
+  query: string
+): { id: string; title: string; author: string; classification: string; availableCount: number }[] {
+  const user = Session.getActiveUser().getEmail();
+  Logger.log(`[AUDIT] ${user} searched to check out by name: "${query}"`);
+
+  const result = getMediaService().searchAvailableResources(query);
+  return result.success && result.data ? result.data : [];
+}
+
+/**
+ * Checks out a resource by its id (the "check out by name" path), used when the
+ * staffer has no barcode in hand. To avoid creating a return-side mismatch, this
+ * only succeeds when the resource has exactly one available copy — then the
+ * recorded barcode is provably the one that was taken. If two or more copies are
+ * on the shelf we refuse and ask staff to scan the physical item, because we
+ * can't tell which copy left the building.
+ */
+function checkoutByResource(
+  borrowerId: string,
+  resourceId: string,
+  borrowerName: string,
+  loanDays: number = 21
+): { success: boolean; title?: string; barcode?: string; error?: string } {
+  const user = Session.getActiveUser().getEmail();
+
+  const mediaService = getMediaService();
+  const allMedia = mediaService.getAll();
+  if (!allMedia.success || !allMedia.data) {
+    return { success: false, error: 'Could not load resources' };
+  }
+
+  // Compare as strings: sheet ids may come back as numbers, but the id
+  // round-trips through the client as a string (matches the `==` id lookups
+  // used elsewhere, e.g. base-service.ts).
+  const media = allMedia.data.find((m) => String(m.id) === String(resourceId));
+  if (!media) {
+    return { success: false, error: 'Resource not found' };
+  }
+
+  const loanService = getLoanService();
+  const allLoans = loanService.getAll();
+  const onLoan = new Set(
+    (allLoans.success && allLoans.data ? allLoans.data : []).map((l) => `${l.barcode ?? ''}`.trim().toLowerCase())
+  );
+
+  const barcodes = (media.barcodes || '').split('|').map((b: string) => b.trim()).filter(Boolean);
+  const available = barcodes.filter((b) => !onLoan.has(b.toLowerCase()));
+
+  if (available.length === 0) {
+    return { success: false, error: `No copies of "${media.title}" are available — every copy is already checked out.` };
+  }
+  if (available.length > 1) {
+    return {
+      success: false,
+      error: `There are ${available.length} copies of "${media.title}" on the shelf, so we can't tell which one was taken. Please find the physical item and check it out by scanning its barcode.`,
+    };
+  }
+
+  const canonicalBarcode = available[0];
+
+  const containing = findContainingBox(media, canonicalBarcode, allMedia.data);
+  if (containing) {
+    return {
+      success: false,
+      error: `"${media.title}" (${canonicalBarcode}) is inside box "${containing.boxTitle}" (${containing.boxBarcode}). Check out the box instead.`,
+    };
+  }
+
+  const result = loanService.checkout(borrowerId, canonicalBarcode, media.id, borrowerName, media.title, loanDays);
+  if (result.success) {
+    writeAuditLog(
+      user,
+      `checked out by name "${media.title}" (barcode=${canonicalBarcode}) to ${borrowerName} (borrower=${borrowerId}) for ${loanDays} days`
+    );
+    return { success: true, title: media.title, barcode: canonicalBarcode };
   }
   return { success: false, error: result.error };
 }
@@ -718,5 +805,7 @@ function logUserError(message: string): void {
 (globalThis as Record<string, unknown>).returnLoanById = returnLoanById;
 (globalThis as Record<string, unknown>).extendLoan = extendLoan;
 (globalThis as Record<string, unknown>).checkoutByBarcode = checkoutByBarcode;
+(globalThis as Record<string, unknown>).findAvailableForCheckout = findAvailableForCheckout;
+(globalThis as Record<string, unknown>).checkoutByResource = checkoutByResource;
 (globalThis as Record<string, unknown>).returnLoanByBarcode = returnLoanByBarcode;
 (globalThis as Record<string, unknown>).extendLoanByBarcode = extendLoanByBarcode;

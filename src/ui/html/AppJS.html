@@ -1142,8 +1142,9 @@
       '<input type="number" id="co-days" value="21" min="1" max="90" title="Number of days before the resource is due back (default: 21)">' +
       '</div>' +
       '<div class="form-group">' +
-      '<label for="co-barcode">Barcode — scan or type then press Enter</label>' +
-      '<input type="text" id="co-barcode" placeholder="Scan barcode..." autocomplete="off" style="font-size:16px;font-weight:600" title="Scan or type a barcode, then press Enter to check out">' +
+      '<label for="co-barcode">Scan barcode — or type a title and press Enter</label>' +
+      '<input type="text" id="co-barcode" placeholder="Scan barcode, or type a title..." autocomplete="off" style="font-size:16px;font-weight:600" title="Scan a barcode to check out instantly, or type a title and press Enter to find it by name (when you don\'t have the item in hand)">' +
+      '<div id="co-title-results" class="autocomplete-results"></div>' +
       '</div>' +
       '<div id="co-spinner" class="action-spinner" style="display:none"><span class="spinner"></span><span class="spinner-text"></span></div>' +
       '<div id="co-items-section" style="display:none;margin-top:16px">' +
@@ -1241,6 +1242,7 @@
     }
     var errEl = document.getElementById('co-error');
     if (errEl) errEl.style.display = 'none';
+    clearCheckoutTitleResults();
     if (!barcode) return;
 
     barcodeField.disabled = true;
@@ -1250,20 +1252,18 @@
       .withSuccessHandler(function (result) {
         hideActionSpinner('co-spinner');
         barcodeField.disabled = false;
-        barcodeField.value = '';
-        barcodeField.focus();
         var errEl = document.getElementById('co-error');
         if (errEl) errEl.style.display = 'none';
         if (result.success) {
-          var section = document.getElementById('co-items-section');
-          var tbody = document.getElementById('co-items-tbody');
-          section.style.display = 'block';
-          tbody.innerHTML +=
-            '<tr>' +
-            '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6">' + escapeHtml(result.title) + '</td>' +
-            '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6">' + escapeHtml(barcode) + '</td>' +
-            '</tr>';
+          barcodeField.value = '';
+          barcodeField.focus();
+          addCheckoutSessionRow(result.title, barcode);
+        } else if (result.notFound) {
+          // Not a barcode — treat what they typed as a title and search by name.
+          searchCheckoutTitles(barcode);
         } else {
+          barcodeField.value = '';
+          barcodeField.focus();
           showErrorDialog(result.error || 'Checkout failed');
         }
       })
@@ -1275,6 +1275,94 @@
         handleError(error);
       })
       .checkoutByBarcode(borrowerId, barcode, borrowerName, days);
+  }
+
+  function clearCheckoutTitleResults() {
+    var el = document.getElementById('co-title-results');
+    if (el) el.innerHTML = '';
+  }
+
+  function addCheckoutSessionRow(title, barcode) {
+    var section = document.getElementById('co-items-section');
+    var tbody = document.getElementById('co-items-tbody');
+    if (!section || !tbody) return;
+    section.style.display = 'block';
+    tbody.innerHTML +=
+      '<tr>' +
+      '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6">' + escapeHtml(title) + '</td>' +
+      '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6">' + escapeHtml(barcode) + '</td>' +
+      '</tr>';
+  }
+
+  // Check-out-by-name fallback: the typed text wasn't a barcode, so look it up
+  // by title and let the staffer pick a resource. Used when they don't have the
+  // physical item in hand (e.g. a trusted person already walked off with it).
+  function searchCheckoutTitles(query) {
+    var container = document.getElementById('co-title-results');
+    if (!container) return;
+    container.innerHTML = '<div class="autocomplete-item loading">Searching titles…</div>';
+    google.script.run
+      .withSuccessHandler(function (results) {
+        var container = document.getElementById('co-title-results');
+        if (!container) return;
+        if (!results || results.length === 0) {
+          container.innerHTML = '<div class="autocomplete-item">No catalog matches for &ldquo;' +
+            escapeHtml(query) + '&rdquo;</div>';
+          return;
+        }
+        container.innerHTML = results.slice(0, 20).map(function (r) {
+          var meta = [r.author, r.classification].filter(function (s) { return s; }).join(' · ');
+          var hint, hintColor;
+          if (r.availableCount === 1) {
+            hint = '1 available'; hintColor = '#166534';
+          } else if (r.availableCount === 0) {
+            hint = 'all copies out'; hintColor = '#991b1b';
+          } else {
+            hint = r.availableCount + ' copies — scan barcode'; hintColor = '#92400e';
+          }
+          return '<div class="autocomplete-item" onclick="checkoutResourceByName(\'' + escapeAttr(r.id) + '\')">' +
+            escapeHtml(r.title) +
+            (meta ? ' <span class="author">(' + escapeHtml(meta) + ')</span>' : '') +
+            ' <span style="float:right;font-size:12px;color:' + hintColor + '">' + escapeHtml(hint) + '</span>' +
+            '</div>';
+        }).join('');
+      })
+      .withFailureHandler(function () {
+        var container = document.getElementById('co-title-results');
+        if (container) container.innerHTML = '<div class="autocomplete-item">Search failed — try again</div>';
+      })
+      .findAvailableForCheckout(query);
+  }
+
+  function checkoutResourceByName(resourceId) {
+    var borrowerId = document.getElementById('co-member-id').value;
+    var borrowerName = document.getElementById('co-member-name').value;
+    var days = parseInt(document.getElementById('co-days').value) || 21;
+    if (!borrowerId) {
+      reportUserError('Please select a member first.');
+      return;
+    }
+    clearCheckoutTitleResults();
+    showActionSpinner('co-spinner', 'Checking out…');
+    google.script.run
+      .withSuccessHandler(function (result) {
+        hideActionSpinner('co-spinner');
+        var barcodeField = document.getElementById('co-barcode');
+        if (result.success) {
+          if (barcodeField) { barcodeField.value = ''; barcodeField.focus(); }
+          addCheckoutSessionRow(result.title, result.barcode);
+        } else {
+          // Multiple available copies (or none): we can't safely guess which
+          // physical copy was taken — surface the message and let staff scan.
+          if (barcodeField) barcodeField.focus();
+          showErrorDialog(result.error || 'Checkout failed');
+        }
+      })
+      .withFailureHandler(function (error) {
+        hideActionSpinner('co-spinner');
+        handleError(error);
+      })
+      .checkoutByResource(borrowerId, resourceId, borrowerName, days);
   }
 
   function showReturnSession() {

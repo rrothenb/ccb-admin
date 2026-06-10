@@ -188,6 +188,53 @@ class MediaService extends BaseEntityService<Media> {
   }
 
   /**
+   * Searches the catalog for resources to check out by name (title/author/etc),
+   * grouped by resource rather than by barcode. Each match reports how many of
+   * its copies are currently available (not on loan). Used by the "check out by
+   * name" fallback in the Checkout session, where the staffer has no barcode in
+   * hand. Resources with zero matching copies are still returned (with
+   * `availableCount: 0`) so the UI can explain "all copies are out" rather than
+   * "not found".
+   */
+  searchAvailableResources(
+    query: string
+  ): OperationResult<{ id: string; title: string; author: string; classification: string; availableCount: number }[]> {
+    const result = this.getAll();
+    if (!result.success || !result.data) {
+      return { ...result, data: [] };
+    }
+    const loanService = getLoanService();
+    const loanResult = loanService.getAll();
+    const loans = loanResult.success && loanResult.data ? loanResult.data : [];
+    const onLoan = new Set(loans.map((l) => `${l.barcode ?? ''}`.trim().toLowerCase()));
+
+    const lowerQuery = query.trim().toLowerCase();
+    if (!lowerQuery) return { success: true, data: [] };
+
+    const matches: { id: string; title: string; author: string; classification: string; availableCount: number }[] = [];
+    for (const resource of result.data) {
+      const barcodes = `${resource.barcodes ?? ''}`.split('|').map((b) => b.trim()).filter(Boolean);
+      const haystacks = [
+        resource.title, resource.author, resource.type, resource.classification, resource.resourceBox,
+      ].map((v) => `${v ?? ''}`.toLowerCase());
+      const isMatch =
+        haystacks.some((h) => h.includes(lowerQuery)) ||
+        barcodes.some((b) => b.toLowerCase().includes(lowerQuery));
+      if (!isMatch) continue;
+
+      const availableCount = barcodes.filter((b) => !onLoan.has(b.toLowerCase())).length;
+      matches.push({
+        id: resource.id,
+        title: `${resource.title ?? ''}`,
+        author: `${resource.author ?? ''}`,
+        classification: `${resource.classification ?? ''}`,
+        availableCount,
+      });
+    }
+    return { success: true, data: matches };
+  }
+
+  /**
    * Gets media items by type
    */
   getByType(type: MediaType): OperationResult<Media[]> {
