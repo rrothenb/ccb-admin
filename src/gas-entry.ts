@@ -476,7 +476,26 @@ function getActiveLoans(): unknown[] {
     return [];
   }
 
-  return loansResult.data;
+  // Classification isn't stored on the Loans sheet, so look it up from the
+  // catalog by barcode. Matching is case-insensitive, like the other
+  // circulation paths.
+  const mediaService = getMediaService();
+  const mediaResult = mediaService.getAll();
+  const classByBarcode: Record<string, string> = {};
+  if (mediaResult.success && mediaResult.data) {
+    for (const resource of mediaResult.data) {
+      const cls = `${resource.classification ?? ''}`;
+      for (const barcode of `${resource.barcodes ?? ''}`.split('|')) {
+        const trimmed = barcode.trim().toLowerCase();
+        if (trimmed) classByBarcode[trimmed] = cls;
+      }
+    }
+  }
+
+  return loansResult.data.map((loan) => ({
+    ...loan,
+    classification: classByBarcode[`${loan.barcode ?? ''}`.trim().toLowerCase()] || '',
+  }));
 }
 
 /**
