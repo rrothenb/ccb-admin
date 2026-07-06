@@ -17,11 +17,11 @@ This system provides a web-based interface for managing a community library. It 
 ## Key Features
 
 - **Standalone web app** — no spreadsheet visible to users, just the web interface
-- **Circulation Desk** — check out, return, and extend loans by scanning/typing a barcode, with barcode typeahead and per-session history
+- **Circulation Desk** — check out, return, and extend loans by scanning/typing a barcode, with barcode typeahead and per-session history; a check-out-by-name fallback lets you type a title and press Enter when a copy has already walked off (only for resources with exactly one available copy)
 - **Members** — full roster shown by default, with client-side search and sortable Name/Expiry columns; active/expired status derived from each member's expiry date
 - **Resources** — search the catalog by title/author/barcode/etc., filter by classification and by availability status (available / on-loan / no-copies); add, edit, and delete resources
-- **Loans** — view active loans, filter to overdue only, search by member/resource/barcode, and sort by member, resource, checkout date, or due date
-- **Audit logging** — write actions (checkouts, returns, edits, deletions) are recorded to a configured log spreadsheet
+- **Loans** — view active loans, filter to overdue only, search by member/resource/barcode, and sort by member, resource, classification, checkout date, or due date
+- **Audit logging** — write actions (checkouts, returns, edits, deletions), session starts (one entry per page load), and every error shown to a user are recorded to a configured log spreadsheet
 - **No authorization prompts beyond sign-in** — users just sign in with their Google account
 
 ## Quick Start
