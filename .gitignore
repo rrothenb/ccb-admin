@@ -70,8 +70,9 @@ web_modules/
 .env.*
 !.env.example
 
-# clasp configuration (contains script IDs)
-.clasp.json
+# clasp configuration (contains script IDs) — both main and admin projects.
+# The committed .clasp.admin.json.example template is kept (it has no real id).
+.clasp*.json
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
@@ -84,6 +85,11 @@ out
 # Nuxt.js build / generate output
 .nuxt
 dist
+dist-admin
+
+# Local-only — never commit/push: real member data (PII) and the memory symlink
+supplemental/
+claude-memory
 
 # Gatsby files
 .cache/

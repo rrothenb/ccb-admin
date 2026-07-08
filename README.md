@@ -14,6 +14,10 @@ This system provides a web-based interface for managing a community library. It 
 
 - **[liberty-extract](https://github.com/rrothenb/liberty-extract)** — companion tooling that extracts the data needed to populate the master spreadsheets (Borrowers, Media, Loans) out of **Liberty**, the library system this app is migrating from. Use it to produce the initial spreadsheet data for setup.
 
+### Admin sync tool (in-progress)
+
+A **second, master-account-only Apps Script project** lives in this same repo (`src/admin-entry.ts` → `dist-admin/`, deployed via `npm run deploy:admin`). It carries the sensitive `contacts`/Drive scopes — kept out of the main app so regular users never have to consent to them — and will own the membership-sync / detector / Gmail-Contacts / website-generation workflow. See **[SETUP-admin.md](SETUP-admin.md)** for its setup and first-run configuration.
+
 ## Key Features
 
 - **Standalone web app** — no spreadsheet visible to users, just the web interface
