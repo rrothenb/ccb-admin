@@ -30,6 +30,18 @@
       <div id="result" class="result"></div>
     </div>
 
+    <div class="card">
+      <h2 style="font-size:1.1rem;margin-top:0">Master file ingestion (spike)</h2>
+      <p class="muted">
+        Upload the Master Membership .xlsx to check GAS can convert and read it —
+        tabs found, header row, column mapping, member count, and a sample roster
+        with computed expiry (enrol + 1 year).
+      </p>
+      <input type="file" id="masterFile" accept=".xlsx" />
+      <button id="ingestBtn" onclick="ingest()">Analyze Master file</button>
+      <div id="ingestResult" class="result"></div>
+    </div>
+
     <script>
       function generate() {
         var btn = document.getElementById('genBtn');
@@ -59,6 +71,48 @@
             out.innerHTML = '<span class="error">Error: ' + err.message + '</span>';
           })
           .generateCatalogue();
+      }
+
+      function ingest() {
+        var f = document.getElementById('masterFile').files[0];
+        var out = document.getElementById('ingestResult');
+        var btn = document.getElementById('ingestBtn');
+        if (!f) { out.innerHTML = '<span class="error">Choose an .xlsx file first.</span>'; return; }
+        btn.disabled = true;
+        out.innerHTML = '<span class="muted">Uploading &amp; converting…</span>';
+        var reader = new FileReader();
+        reader.onload = function () {
+          var b64 = reader.result.split(',')[1];
+          google.script.run
+            .withSuccessHandler(function (r) {
+              btn.disabled = false;
+              if (!r || !r.success) {
+                out.innerHTML = '<span class="error">Failed: ' + ((r && r.error) || 'unknown') + '</span>';
+                return;
+              }
+              var rows = (r.sample || [])
+                .map(function (m) {
+                  return '<tr><td>' + m.name + '</td><td>' + m.classNo + '</td><td>' + m.status +
+                         '</td><td>' + m.enrolled + '</td><td>' + m.expiry + '</td></tr>';
+                }).join('');
+              out.innerHTML =
+                '<div><strong>' + r.memberCount + ' members</strong> (' + r.withExpiry + ' with computed expiry)</div>' +
+                '<div class="muted">tab: ' + r.chosenTab + ' · header row ' + r.headerRow +
+                  ' · cols name/enrol/class/status = ' + JSON.stringify(r.columnMap) + '</div>' +
+                '<div class="muted">tabs: ' + (r.tabsFound || []).join(', ') + '</div>' +
+                '<table border="1" cellpadding="4" style="border-collapse:collapse;margin-top:0.5rem;font-size:0.85rem">' +
+                  '<tr><th>Name</th><th>Class</th><th>Status</th><th>Enrolled</th><th>Expiry</th></tr>' + rows +
+                '</table>' +
+                ((r.anomalies && r.anomalies.length) ?
+                  '<div class="error" style="margin-top:0.5rem">Anomalies: <ul><li>' + r.anomalies.join('</li><li>') + '</li></ul></div>' : '');
+            })
+            .withFailureHandler(function (err) {
+              btn.disabled = false;
+              out.innerHTML = '<span class="error">Error: ' + err.message + '</span>';
+            })
+            .ingestSpike_analyzeMaster(b64, f.name);
+        };
+        reader.readAsDataURL(f);
       }
     </script>
   </body>

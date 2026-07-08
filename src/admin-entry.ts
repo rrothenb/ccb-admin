@@ -26,6 +26,8 @@ import { setAuditLogSpreadsheetId, getAuditLogSpreadsheetId } from './services/a
 
 import { generateCatalogue } from './admin/catalogue';
 
+import { ingestSpike_analyzeMaster } from './admin/ingest-spike';
+
 import {
   contactsSpike_listManaged,
   contactsSpike_syncDryRun,
@@ -122,6 +124,9 @@ function runMembershipSync(): { success: boolean; error?: string } {
 
 // Website generation
 (globalThis as Record<string, unknown>).generateCatalogue = generateCatalogue;
+
+// Ingestion spike (GAS xlsx read)
+(globalThis as Record<string, unknown>).ingestSpike_analyzeMaster = ingestSpike_analyzeMaster;
 
 // Contacts spike (People API risk retirement)
 (globalThis as Record<string, unknown>).contactsSpike_listManaged = contactsSpike_listManaged;
