@@ -26,6 +26,13 @@ import { setAuditLogSpreadsheetId, getAuditLogSpreadsheetId } from './services/a
 
 import { generateCatalogue } from './admin/catalogue';
 
+import {
+  contactsSpike_listManaged,
+  contactsSpike_syncDryRun,
+  contactsSpike_syncApply,
+  contactsSpike_teardown,
+} from './admin/contacts-spike';
+
 import { doGet, include } from './admin/webapp';
 
 // ============================================================================
@@ -115,3 +122,9 @@ function runMembershipSync(): { success: boolean; error?: string } {
 
 // Website generation
 (globalThis as Record<string, unknown>).generateCatalogue = generateCatalogue;
+
+// Contacts spike (People API risk retirement)
+(globalThis as Record<string, unknown>).contactsSpike_listManaged = contactsSpike_listManaged;
+(globalThis as Record<string, unknown>).contactsSpike_syncDryRun = contactsSpike_syncDryRun;
+(globalThis as Record<string, unknown>).contactsSpike_syncApply = contactsSpike_syncApply;
+(globalThis as Record<string, unknown>).contactsSpike_teardown = contactsSpike_teardown;
