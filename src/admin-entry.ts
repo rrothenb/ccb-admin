@@ -24,9 +24,13 @@ import {
 
 import { setAuditLogSpreadsheetId, getAuditLogSpreadsheetId } from './services/audit-log';
 
-import { generateCatalogue } from './admin/catalogue';
+import { generateCatalogue } from './admin/catalogue/generate';
 
-import { ingestSpike_analyzeMaster } from './admin/ingest-spike';
+import { runMembershipSync, resolveFinding, unresolveFinding } from './admin/sync';
+
+import { generateSchedule } from './admin/schedule/generate';
+
+import { previewContactProjection, applyContactProjection } from './admin/contacts/project';
 
 import {
   contactsSpike_listManaged,
@@ -91,18 +95,9 @@ function clearConfig(): void {
 // SYNC FUNCTIONS
 // ============================================================================
 
-/**
- * Placeholder for the membership sync entry point. Real implementation will:
- *  - accept the two uploaded spreadsheets (Master Membership + Register),
- *  - run the reconciliation detector (name-uniqueness first, then the rest),
- *  - return a worklist of flagged issues for the admin to resolve,
- *  - on a clean run: write expiry dates (DATE ENROLED + 1 year) to the members
- *    sheet and project to Gmail Contacts (labeled by class level/teacher/number)
- *    + the website artifacts.
- */
-function runMembershipSync(): { success: boolean; error?: string } {
-  return { success: false, error: 'Not implemented yet' };
-}
+// The membership sync detection phase (upload both spreadsheets → reconcile the
+// three sources → tiered worklist) lives in ./admin/sync. Expiry writes + the
+// Contacts/website projection (the clean-sync phase) come next.
 
 // ============================================================================
 // EXPOSE GLOBAL FUNCTIONS
@@ -121,12 +116,16 @@ function runMembershipSync(): { success: boolean; error?: string } {
 
 // Sync functions
 (globalThis as Record<string, unknown>).runMembershipSync = runMembershipSync;
+(globalThis as Record<string, unknown>).resolveFinding = resolveFinding;
+(globalThis as Record<string, unknown>).unresolveFinding = unresolveFinding;
 
 // Website generation
 (globalThis as Record<string, unknown>).generateCatalogue = generateCatalogue;
+(globalThis as Record<string, unknown>).generateSchedule = generateSchedule;
 
-// Ingestion spike (GAS xlsx read)
-(globalThis as Record<string, unknown>).ingestSpike_analyzeMaster = ingestSpike_analyzeMaster;
+// Gmail Contacts projection
+(globalThis as Record<string, unknown>).previewContactProjection = previewContactProjection;
+(globalThis as Record<string, unknown>).applyContactProjection = applyContactProjection;
 
 // Contacts spike (People API risk retirement)
 (globalThis as Record<string, unknown>).contactsSpike_listManaged = contactsSpike_listManaged;

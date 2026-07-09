@@ -8,9 +8,15 @@
 
 const AUDIT_LOG_PROPERTY_KEY = 'AUDIT_LOG_SPREADSHEET_ID';
 
+// The shared audit-log spreadsheet. Used as a fallback so a project that hasn't
+// run setAuditLogSpreadsheetId() (e.g. the admin project) still logs to the same
+// sheet instead of silently falling back to Logger.log.
+const DEFAULT_AUDIT_LOG_SPREADSHEET_ID = '14uxC2oEdsepGraOAFA2xfJ2QEtn5M3tjgvgVBvYBLWw';
+
 function getAuditLogSheet(): GoogleAppsScript.Spreadsheet.Sheet | null {
   const spreadsheetId =
-    PropertiesService.getScriptProperties().getProperty(AUDIT_LOG_PROPERTY_KEY);
+    PropertiesService.getScriptProperties().getProperty(AUDIT_LOG_PROPERTY_KEY) ||
+    DEFAULT_AUDIT_LOG_SPREADSHEET_ID;
   if (!spreadsheetId) {
     return null;
   }
@@ -55,8 +61,8 @@ function writeAuditLog(user: string, action: string): void {
 }
 
 function setAuditLogSpreadsheetId(): void {
-  PropertiesService.getScriptProperties().setProperty(AUDIT_LOG_PROPERTY_KEY, '14uxC2oEdsepGraOAFA2xfJ2QEtn5M3tjgvgVBvYBLWw');
-  Logger.log(`Audit log spreadsheet ID set to: 14uxC2oEdsepGraOAFA2xfJ2QEtn5M3tjgvgVBvYBLWw`);
+  PropertiesService.getScriptProperties().setProperty(AUDIT_LOG_PROPERTY_KEY, DEFAULT_AUDIT_LOG_SPREADSHEET_ID);
+  Logger.log(`Audit log spreadsheet ID set to: ${DEFAULT_AUDIT_LOG_SPREADSHEET_ID}`);
 }
 
 function getAuditLogSpreadsheetId(): string {

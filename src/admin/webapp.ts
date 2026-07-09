@@ -5,10 +5,14 @@
  * consent screen unchanged. Only the master account ever authorizes this one.
  */
 
+import { logAdmin } from './log';
+
 /**
- * Served when the admin visits the admin web app URL.
+ * Served when the admin visits the admin web app URL. Logs the visit (one entry
+ * per landing-page load), mirroring the main app's session-start logging.
  */
 function doGet(): GoogleAppsScript.HTML.HtmlOutput {
+  logAdmin('opened the admin app (landing page)');
   return HtmlService.createTemplateFromFile('Admin')
     .evaluate()
     .setTitle('CCB Admin Sync')

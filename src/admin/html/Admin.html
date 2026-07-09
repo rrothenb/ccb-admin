@@ -4,7 +4,7 @@
     <base target="_top" />
     <meta charset="utf-8" />
     <style>
-      body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 2rem; max-width: 720px; color: #1a1a1a; }
+      body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 2rem; max-width: 1000px; color: #1a1a1a; }
       h1 { font-size: 1.4rem; }
       .card { border: 1px solid #ddd; border-radius: 8px; padding: 1rem 1.25rem; margin: 1rem 0; }
       button { font-size: 1rem; padding: 0.5rem 1rem; border-radius: 6px; border: 1px solid #0b57d0; background: #0b57d0; color: #fff; cursor: pointer; }
@@ -14,11 +14,88 @@
       .result a { color: #0b57d0; }
       .error { color: #b00020; }
       ul { margin: 0.5rem 0; padding-left: 1.2rem; }
+      .field { margin: 0.4rem 0; }
+      .field label { display: inline-block; min-width: 8rem; }
+      .gate { font-weight: 600; margin: 0.75rem 0; }
+      .gate.ok { color: #1a7f37; }
+      .gate.blocked { color: #b00020; }
+      .finding { border-left: 4px solid #ccc; padding: 0.5rem 0.75rem; margin: 0.5rem 0; background: #fafafa; border-radius: 4px; }
+      .finding.block { border-left-color: #b00020; }
+      .finding.confirm { border-left-color: #e8a800; }
+      .finding.fyi { border-left-color: #0b57d0; }
+      .finding .meta { font-size: 0.8rem; color: #666; margin-top: 0.2rem; }
+      .finding button.resolve { font-size: 0.8rem; padding: 0.2rem 0.5rem; background: #fff; color: #0b57d0; border-color: #0b57d0; margin-top: 0.3rem; }
+      .tierhead { font-weight: 600; margin: 1rem 0 0.25rem; }
+      .scrolllist { max-height: 380px; overflow: auto; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 0.75rem; }
+      .plantable { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+      .plantable th, .plantable td { text-align: left; padding: 3px 10px; border-bottom: 1px solid #eee; vertical-align: top; }
+      .plantable th { position: sticky; top: 0; background: #fff; border-bottom: 1px solid #ccc; }
+      .plantable td.nowrap { white-space: nowrap; }
+      .plantable td.labels { color: #444; }
+      /* Inline busy spinner — matches the main app's .spinner */
+      .action-spinner { display: inline-flex; align-items: center; gap: 8px; color: #6b7280; font-size: 0.9rem; }
+      .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #d1d5db; border-top-color: #0b57d0; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      body.busy, body.busy * { cursor: progress !important; }
     </style>
   </head>
   <body>
     <h1>CCB Admin Sync</h1>
-    <p class="muted">Master-account-only tools. More of the sync workflow will live here.</p>
+    <p class="muted">Master-account-only tools.</p>
+
+    <div class="card" style="background:#f5f8ff">
+      <h2 style="font-size:1.1rem;margin-top:0">Spreadsheets</h2>
+      <p class="muted">
+        Pick the Master Membership and Register files once — the sync, contacts,
+        and schedule tools below all use these. (The library catalogue reads the
+        Media sheet directly and needs no upload.)
+      </p>
+      <div class="field"><label for="masterFile">Master file (.xlsx)</label><input type="file" id="masterFile" accept=".xlsx" /></div>
+      <div class="field"><label for="registerFile">Register file (.xlsx)</label><input type="file" id="registerFile" accept=".xlsx" /></div>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size:1.1rem;margin-top:0">Membership sync — detect</h2>
+      <p class="muted">
+        Reconciles the Master + Register against the app's members and returns a
+        tiered worklist. It makes no changes — expiry writes and the
+        Contacts/website projection come after the worklist is clear. 🛑 items
+        block the sync; ⚠️ need your confirmation; ℹ️ are informational.
+        Resolving a ⚠️/ℹ️ item hides it on future runs.
+      </p>
+      <button id="syncBtn" onclick="runSync()">Run detection</button>
+      <div id="syncResult" class="result"></div>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size:1.1rem;margin-top:0">Gmail Contacts projection</h2>
+      <p class="muted">
+        Projects current members into this account's Contacts under the
+        <strong>CCB Members</strong> label, tagged by class / teacher / level so
+        you can email a whole class from Gmail. Preview shows the planned
+        create / update / remove; only <strong>CCB</strong> labels and contacts in
+        that umbrella are ever touched. Apply writes to Contacts (not the
+        spreadsheets) and is guarded against oversized diffs.
+      </p>
+      <button id="conPreviewBtn" onclick="runContacts(false)">Preview</button>
+      <button id="conApplyBtn" onclick="runContacts(true)" disabled style="background:#b06a00;border-color:#b06a00">Apply to Contacts</button>
+      <div id="conResult" class="result"></div>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size:1.1rem;margin-top:0">Website class schedule</h2>
+      <p class="muted">
+        Upload the Master and Register to rebuild the class-schedule table into a
+        Google Doc with a stable PDF link. Teacher/level (Register), day/time and
+        enrolment (Master) are read live from the spreadsheets. Places Available /
+        Weeks Left / Fee need capacity/term/fee, which aren't in the spreadsheets,
+        so they show “—” until supplied. Reads only — no changes to the spreadsheets.
+      </p>
+      <div class="field"><label for="genCap">Class capacity</label><input type="number" id="genCap" value="10" min="1" style="width:5rem" /></div>
+      <div class="field"><label for="storyCap">Story Time capacity</label><input type="number" id="storyCap" value="8" min="1" style="width:5rem" /></div>
+      <button id="schedBtn" onclick="runSchedule()">Generate schedule</button>
+      <div id="schedResult" class="result"></div>
+    </div>
 
     <div class="card">
       <h2 style="font-size:1.1rem;margin-top:0">Library catalogue</h2>
@@ -30,24 +107,324 @@
       <div id="result" class="result"></div>
     </div>
 
-    <div class="card">
-      <h2 style="font-size:1.1rem;margin-top:0">Master file ingestion (spike)</h2>
-      <p class="muted">
-        Upload the Master Membership .xlsx to check GAS can convert and read it —
-        tabs found, header row, column mapping, member count, and a sample roster
-        with computed expiry (enrol + 1 year).
-      </p>
-      <input type="file" id="masterFile" accept=".xlsx" />
-      <button id="ingestBtn" onclick="ingest()">Analyze Master file</button>
-      <div id="ingestResult" class="result"></div>
-    </div>
 
     <script>
+      var TIER_META = {
+        block:   { icon: '🛑', label: 'Blocking — must fix before syncing' },
+        confirm: { icon: '⚠️', label: 'Confirm' },
+        fyi:     { icon: 'ℹ️', label: 'For your information' }
+      };
+
+      function readFileB64(input) {
+        return new Promise(function (resolve, reject) {
+          var f = input.files[0];
+          if (!f) { resolve(null); return; }
+          var reader = new FileReader();
+          reader.onload = function () { resolve({ b64: reader.result.split(',')[1], name: f.name }); };
+          reader.onerror = function () { reject(new Error('Could not read ' + f.name)); };
+          reader.readAsDataURL(f);
+        });
+      }
+
+      function escapeHtml(s) {
+        return String(s == null ? '' : s)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+
+      // Reads the two shared spreadsheet pickers at the top of the page. Resolves
+      // to { master, register } or null if either is missing.
+      function readSpreadsheets() {
+        return Promise.all([
+          readFileB64(document.getElementById('masterFile')),
+          readFileB64(document.getElementById('registerFile'))
+        ]).then(function (files) {
+          if (!files[0] || !files[1]) return null;
+          return { master: files[0], register: files[1] };
+        });
+      }
+
+      // Inline busy indicator (spinner + message) + a page-wide progress cursor.
+      // The cursor is cleared automatically (see watchBusy) once no result area
+      // is showing a spinner, so individual handlers don't need to reset it.
+      function busy(msg) {
+        document.body.classList.add('busy');
+        return '<span class="action-spinner"><span class="spinner"></span>' + escapeHtml(msg || 'Working…') + '</span>';
+      }
+
+      // Clears the progress cursor whenever the spinner disappears from every
+      // result area (i.e. a handler has overwritten it with a result or error).
+      function watchBusy() {
+        var observer = new MutationObserver(function () {
+          if (!document.querySelector('.result .spinner')) document.body.classList.remove('busy');
+        });
+        ['syncResult', 'conResult', 'schedResult', 'result'].forEach(function (id) {
+          var el = document.getElementById(id);
+          if (el) observer.observe(el, { childList: true, subtree: true });
+        });
+      }
+      watchBusy();
+
+      var MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      function humanDate(iso) {
+        var p = String(iso || '').split('-');
+        if (p.length !== 3) return iso;
+        return MONTHS[(+p[1]) - 1] + ' ' + (+p[2]) + ', ' + p[0];
+      }
+
+      function renderPlan(plan) {
+        if (!plan) return '';
+        var target = humanDate(plan.targetExpiryISO);
+        var rows = plan.toUpdate.map(function (c) {
+          return '<tr><td class="nowrap">' + escapeHtml(c.name) + '</td><td class="nowrap">' + escapeHtml(c.fromRaw) +
+                 '</td><td class="nowrap">&rarr; ' + escapeHtml(humanDate(c.toISO)) + '</td></tr>';
+        }).join('');
+        var unconfirmed = plan.viaUnconfirmedMatch > 0
+          ? '<div class="muted">' + plan.viaUnconfirmedMatch + ' of these depend on a name/email match you haven\'t confirmed yet (see ⚠️ above).</div>'
+          : '';
+        var table = plan.toUpdate.length
+          ? '<div class="scrolllist"><table class="plantable"><thead><tr><th>Member</th><th>Current expiry</th><th>Would become</th></tr></thead><tbody>' +
+              rows + '</tbody></table></div>'
+          : '';
+        return '<div class="card" style="background:#f5f8ff">' +
+          '<h3 style="margin:0 0 0.5rem;font-size:1rem">Planned changes to app members</h3>' +
+          '<p class="muted" style="margin-top:0">Preview only — <strong>nothing is written</strong>. When the write phase is built, applying this sync would:</p>' +
+          '<ul>' +
+            '<li><strong>' + plan.toUpdate.length + '</strong> current member(s) would have their expiry set to <strong>' + escapeHtml(target) + '</strong>.</li>' +
+            '<li>' + plan.alreadyCurrentCount + ' already at that date — no change.</li>' +
+            '<li>' + plan.cannotWriteYet.length + ' Master member(s) can\'t be updated until added to the app.</li>' +
+          '</ul>' +
+          unconfirmed +
+          '<p class="muted">Only these ' + plan.currentMemberCount + ' matched current members are ever touched — the other app records are left alone.</p>' +
+          table +
+          '</div>';
+      }
+
+      function renderFinding(f) {
+        var meta = TIER_META[f.tier] || TIER_META.fyi;
+        var loc = f.location ? '<span> · ' + escapeHtml(f.location) + '</span>' : '';
+        var resolveBtn = f.tier === 'block' ? '' :
+          '<button class="resolve" onclick="resolveFinding(\'' + encodeURIComponent(f.key) + '\', this)">Mark resolved</button>';
+        return '<div class="finding ' + f.tier + '">' +
+          '<div>' + meta.icon + ' ' + escapeHtml(f.message) + '</div>' +
+          '<div class="meta">' + escapeHtml(f.code) + ' · ' + escapeHtml(f.engine) + loc + '</div>' +
+          resolveBtn +
+          '</div>';
+      }
+
+      function renderReport(res) {
+        var out = document.getElementById('syncResult');
+        var report = res.report, stats = res.stats, plan = res.plan, c = report.counts;
+        var gate = report.canSync
+          ? '<div class="gate ok">✓ No blocking issues — ready for the (not-yet-built) write phase.</div>'
+          : '<div class="gate blocked">🛑 ' + c.block + ' blocking issue(s) — fix these before the sync can run.</div>';
+
+        var summary =
+          '<div class="muted">' +
+            stats.masterMembers + ' Master · ' + stats.registerStudents + ' Register · ' +
+            stats.appMembers + ' app members · classes: ' + (stats.classIds.join(', ') || '—') +
+            ' · Master tab "' + escapeHtml(stats.masterTab) + '" (header row ' + stats.masterHeaderRow + ')' +
+          '</div>' +
+          '<div class="muted">Every synced member will get expiry <strong>' + escapeHtml(stats.computedExpiry) + '</strong> (school-year start + 1 year).</div>' +
+          '<div class="muted">' + c.block + ' blocking · ' + c.confirm + ' to confirm · ' + c.fyi + ' fyi</div>';
+
+        var html = summary + gate + renderPlan(plan);
+        ['block', 'confirm', 'fyi'].forEach(function (tier) {
+          var items = report.findings.filter(function (f) { return f.tier === tier; });
+          if (!items.length) return;
+          html += '<div class="tierhead">' + TIER_META[tier].icon + ' ' + TIER_META[tier].label + ' (' + items.length + ')</div>';
+          html += items.map(renderFinding).join('');
+        });
+        if (!report.findings.length) html += '<p class="muted">No findings.</p>';
+        out.innerHTML = html;
+      }
+
+      function resolveFinding(encodedKey, btn) {
+        btn.disabled = true;
+        btn.textContent = 'Resolving…';
+        google.script.run
+          .withSuccessHandler(function (r) {
+            var finding = btn.closest('.finding');
+            if (r && r.success) { finding.parentNode.removeChild(finding); }
+            else { btn.disabled = false; btn.textContent = 'Mark resolved'; }
+          })
+          .withFailureHandler(function () { btn.disabled = false; btn.textContent = 'Mark resolved'; })
+          .resolveFinding(decodeURIComponent(encodedKey));
+      }
+
+      function runSync() {
+        var btn = document.getElementById('syncBtn');
+        var out = document.getElementById('syncResult');
+        btn.disabled = true;
+        out.innerHTML = busy('Reading files…');
+        readSpreadsheets().then(function (f) {
+          if (!f) {
+            btn.disabled = false;
+            out.innerHTML = '<span class="error">Pick the Master and Register files at the top of the page first.</span>';
+            return;
+          }
+          var master = f.master, register = f.register;
+          out.innerHTML = busy('Uploading, converting & reconciling… this can take a moment.');
+          google.script.run
+            .withSuccessHandler(function (res) {
+              btn.disabled = false;
+              if (!res || !res.success) {
+                out.innerHTML = '<span class="error">Failed: ' + escapeHtml((res && res.error) || 'unknown error') + '</span>';
+                return;
+              }
+              renderReport(res);
+            })
+            .withFailureHandler(function (err) {
+              btn.disabled = false;
+              out.innerHTML = '<span class="error">Error: ' + escapeHtml(err.message) + '</span>';
+            })
+            .runMembershipSync(master.b64, master.name, register.b64, register.name);
+        }).catch(function (err) {
+          btn.disabled = false;
+          out.innerHTML = '<span class="error">Error: ' + escapeHtml(err.message) + '</span>';
+        });
+      }
+
+      var conApplyArmed = false;
+      function renderContactPlan(res) {
+        var out = document.getElementById('conResult');
+        var plan = res.plan, stats = res.stats;
+        // A titled, fully-scrollable table — every item shown, name/email in
+        // their own columns, labels comma-delimited (and allowed to wrap).
+        var section = function (title, color, arr, headCols, rowFn) {
+          if (!arr.length) return '';
+          var head = '<div class="tierhead"' + (color ? ' style="color:' + color + '"' : '') + '>' + title + ' (' + arr.length + ')</div>';
+          var ths = headCols.map(function (h) { return '<th>' + h + '</th>'; }).join('');
+          return head + '<div class="scrolllist"><table class="plantable"><thead><tr>' + ths + '</tr></thead><tbody>' +
+            arr.map(rowFn).join('') + '</tbody></table></div>';
+        };
+        var applied = stats && stats.applied
+          ? '<div class="gate ok">✓ Applied: ' + stats.applied.created + ' created · ' + stats.applied.updated + ' updated · ' + stats.applied.removed + ' removed.</div>'
+          : '';
+        out.innerHTML = applied +
+          '<div class="muted">' + stats.desired + ' current members · ' + stats.existingManaged + ' already in the CCB Members label · ' + plan.unchangedCount + ' unchanged.</div>' +
+          section('Create', '', plan.toCreate, ['Name', 'Email', 'Labels'], function (c) {
+            return '<tr><td class="nowrap">' + escapeHtml(c.family + ', ' + c.given) + '</td><td class="nowrap">' +
+              escapeHtml(c.email) + '</td><td class="labels">' + escapeHtml(c.labels.join(', ')) + '</td></tr>';
+          }) +
+          section('Update', '', plan.toUpdate, ['Email', 'Change'], function (u) {
+            var bits = [];
+            if (u.nameChanged) bits.push('name→' + escapeHtml(u.toFamily + ', ' + u.toGiven));
+            if (u.labelsToAdd.length) bits.push('+[' + escapeHtml(u.labelsToAdd.join(', ')) + ']');
+            if (u.labelsToRemove.length) bits.push('−[' + escapeHtml(u.labelsToRemove.join(', ')) + ']');
+            return '<tr><td class="nowrap">' + escapeHtml(u.email) + '</td><td class="labels">' + bits.join(' ') + '</td></tr>';
+          }) +
+          section('Remove — deletes the contact', '#b00020', plan.toRemove, ['Name', 'Email'], function (r) {
+            return '<tr><td class="nowrap">' + escapeHtml(r.displayName) + '</td><td class="nowrap">' + escapeHtml(r.email) + '</td></tr>';
+          }) +
+          (!plan.toCreate.length && !plan.toUpdate.length && !plan.toRemove.length ? '<p class="muted">Contacts already match — nothing to do.</p>' : '');
+      }
+
+      function runContacts(apply) {
+        var previewBtn = document.getElementById('conPreviewBtn');
+        var applyBtn = document.getElementById('conApplyBtn');
+        var out = document.getElementById('conResult');
+
+        // Two-click confirm for apply (no native dialog): first click arms, second applies.
+        if (apply && !conApplyArmed) {
+          conApplyArmed = true;
+          applyBtn.textContent = 'Click again to confirm — writes to Contacts';
+          return;
+        }
+        conApplyArmed = false;
+        applyBtn.textContent = 'Apply to Contacts';
+
+        previewBtn.disabled = true;
+        applyBtn.disabled = true;
+        out.innerHTML = busy('Reading files…');
+        readSpreadsheets().then(function (f) {
+          if (!f) {
+            previewBtn.disabled = false;
+            out.innerHTML = '<span class="error">Pick the Master and Register files at the top of the page first.</span>';
+            return;
+          }
+          var master = f.master, register = f.register;
+          out.innerHTML = busy(apply ? 'Applying to Contacts…' : 'Building projection preview…');
+          google.script.run
+            .withSuccessHandler(function (res) {
+              previewBtn.disabled = false;
+              if (!res || !res.success) {
+                out.innerHTML = '<span class="error">Failed: ' + escapeHtml((res && res.error) || 'unknown error') + '</span>';
+                return;
+              }
+              renderContactPlan(res);
+              // Enable Apply only after a successful preview that has changes.
+              var hasChanges = res.plan.toCreate.length || res.plan.toUpdate.length || res.plan.toRemove.length;
+              applyBtn.disabled = apply || !hasChanges;
+            })
+            .withFailureHandler(function (err) {
+              previewBtn.disabled = false;
+              out.innerHTML = '<span class="error">Error: ' + escapeHtml(err.message) + '</span>';
+            })
+          [apply ? 'applyContactProjection' : 'previewContactProjection'](master.b64, master.name, register.b64, register.name);
+        }).catch(function (err) {
+          previewBtn.disabled = false;
+          out.innerHTML = '<span class="error">Error: ' + escapeHtml(err.message) + '</span>';
+        });
+      }
+
+      function runSchedule() {
+        var btn = document.getElementById('schedBtn');
+        var out = document.getElementById('schedResult');
+        btn.disabled = true;
+        out.innerHTML = busy('Reading files…');
+        readSpreadsheets().then(function (f) {
+          if (!f) {
+            btn.disabled = false;
+            out.innerHTML = '<span class="error">Pick the Master and Register files at the top of the page first.</span>';
+            return;
+          }
+          var master = f.master, register = f.register;
+          out.innerHTML = busy('Building schedule…');
+          google.script.run
+            .withSuccessHandler(function (res) {
+              btn.disabled = false;
+              if (!res || !res.success) {
+                out.innerHTML = '<span class="error">Failed: ' + escapeHtml((res && res.error) || 'unknown error') + '</span>';
+                return;
+              }
+              var rows = (res.rows || []).map(function (r) {
+                var cell = function (v) { return (v === null || v === undefined || v === '') ? '—' : escapeHtml(v); };
+                var places = r.placesAvailable === 0
+                  ? '<span style="color:#c0391b;font-weight:600">Full</span>'
+                  : r.placesAvailable;
+                return '<tr><td class="nowrap">' + escapeHtml(r.id) + '</td><td class="nowrap">' + cell(r.dayTime) +
+                       '</td><td class="nowrap">' + cell(r.teacher) + '</td><td>' + cell(r.level) +
+                       '</td><td class="nowrap">' + r.enrolled + '/' + r.capacity + '</td><td class="nowrap">' + places +
+                       '</td><td class="nowrap">' + cell(r.weeksLeft) + '</td><td class="nowrap">' + cell(r.fee) + '</td></tr>';
+              }).join('');
+              out.innerHTML =
+                '<div style="margin:0.5rem 0">' +
+                  '<a href="' + res.pdfUrl + '" target="_blank" rel="noopener">Open PDF (stable link)</a> · ' +
+                  '<a href="' + res.docUrl + '" target="_blank" rel="noopener">Open Doc</a> · ' +
+                  '<span class="muted">updated ' + escapeHtml(res.generatedAt) + '</span>' +
+                '</div>' +
+                '<div class="scrolllist"><table class="plantable"><thead><tr><th>Class</th><th>Day / Time</th><th>Teacher</th><th>Level</th><th>Enrolled</th><th>Places</th><th>Wks Left</th><th>Fee</th></tr></thead><tbody>' +
+                  rows +
+                '</tbody></table></div>';
+            })
+            .withFailureHandler(function (err) {
+              btn.disabled = false;
+              out.innerHTML = '<span class="error">Error: ' + escapeHtml(err.message) + '</span>';
+            })
+            .generateSchedule(master.b64, master.name, register.b64, register.name,
+              parseInt(document.getElementById('genCap').value, 10) || 10,
+              parseInt(document.getElementById('storyCap').value, 10) || 8);
+        }).catch(function (err) {
+          btn.disabled = false;
+          out.innerHTML = '<span class="error">Error: ' + escapeHtml(err.message) + '</span>';
+        });
+      }
+
       function generate() {
         var btn = document.getElementById('genBtn');
         var out = document.getElementById('result');
         btn.disabled = true;
-        out.innerHTML = '<span class="muted">Generating… this can take a moment.</span>';
+        out.innerHTML = busy('Generating… this can take a moment.');
         google.script.run
           .withSuccessHandler(function (res) {
             btn.disabled = false;
@@ -55,64 +432,26 @@
               out.innerHTML = '<span class="error">Failed: ' + ((res && res.error) || 'unknown error') + '</span>';
               return;
             }
-            var lines = (res.sections || [])
-              .map(function (s) { return '<li>' + s.title + ': ' + s.count + '</li>'; })
-              .join('');
+            var docs = res.docs || [];
+            var total = docs.reduce(function (n, d) { return n + d.total; }, 0);
+            var rows = docs.map(function (d) {
+              var secs = (d.sections || []).map(function (s) { return escapeHtml(s.header) + ' (' + s.count + ')'; }).join(', ');
+              return '<tr><td><strong>' + escapeHtml(d.title.replace(/^CCB Library — /, '')) + '</strong><br>' +
+                '<span class="muted">' + secs + '</span></td>' +
+                '<td class="nowrap">' + d.total + '</td>' +
+                '<td class="nowrap"><a href="' + d.pdfUrl + '" target="_blank" rel="noopener">PDF</a> · ' +
+                '<a href="' + d.docUrl + '" target="_blank" rel="noopener">Doc</a></td></tr>';
+            }).join('');
             out.innerHTML =
-              '<div><strong>' + res.totalCount + ' titles</strong> · updated ' + res.generatedAt + '</div>' +
-              '<div style="margin:0.5rem 0">' +
-                '<a href="' + res.pdfUrl + '" target="_blank" rel="noopener">Open PDF (stable link)</a> · ' +
-                '<a href="' + res.docUrl + '" target="_blank" rel="noopener">Open Doc</a>' +
-              '</div>' +
-              '<ul>' + lines + '</ul>';
+              '<div><strong>' + total + ' entries</strong> across ' + docs.length + ' documents · updated ' + escapeHtml(res.generatedAt) + '</div>' +
+              '<div class="scrolllist"><table class="plantable"><thead><tr><th>Document</th><th>Entries</th><th>Links</th></tr></thead><tbody>' +
+              rows + '</tbody></table></div>';
           })
           .withFailureHandler(function (err) {
             btn.disabled = false;
             out.innerHTML = '<span class="error">Error: ' + err.message + '</span>';
           })
           .generateCatalogue();
-      }
-
-      function ingest() {
-        var f = document.getElementById('masterFile').files[0];
-        var out = document.getElementById('ingestResult');
-        var btn = document.getElementById('ingestBtn');
-        if (!f) { out.innerHTML = '<span class="error">Choose an .xlsx file first.</span>'; return; }
-        btn.disabled = true;
-        out.innerHTML = '<span class="muted">Uploading &amp; converting…</span>';
-        var reader = new FileReader();
-        reader.onload = function () {
-          var b64 = reader.result.split(',')[1];
-          google.script.run
-            .withSuccessHandler(function (r) {
-              btn.disabled = false;
-              if (!r || !r.success) {
-                out.innerHTML = '<span class="error">Failed: ' + ((r && r.error) || 'unknown') + '</span>';
-                return;
-              }
-              var rows = (r.sample || [])
-                .map(function (m) {
-                  return '<tr><td>' + m.name + '</td><td>' + m.classNo + '</td><td>' + m.status +
-                         '</td><td>' + m.enrolled + '</td><td>' + m.expiry + '</td></tr>';
-                }).join('');
-              out.innerHTML =
-                '<div><strong>' + r.memberCount + ' members</strong> (' + r.withExpiry + ' with computed expiry)</div>' +
-                '<div class="muted">tab: ' + r.chosenTab + ' · header row ' + r.headerRow +
-                  ' · cols name/enrol/class/status = ' + JSON.stringify(r.columnMap) + '</div>' +
-                '<div class="muted">tabs: ' + (r.tabsFound || []).join(', ') + '</div>' +
-                '<table border="1" cellpadding="4" style="border-collapse:collapse;margin-top:0.5rem;font-size:0.85rem">' +
-                  '<tr><th>Name</th><th>Class</th><th>Status</th><th>Enrolled</th><th>Expiry</th></tr>' + rows +
-                '</table>' +
-                ((r.anomalies && r.anomalies.length) ?
-                  '<div class="error" style="margin-top:0.5rem">Anomalies: <ul><li>' + r.anomalies.join('</li><li>') + '</li></ul></div>' : '');
-            })
-            .withFailureHandler(function (err) {
-              btn.disabled = false;
-              out.innerHTML = '<span class="error">Error: ' + err.message + '</span>';
-            })
-            .ingestSpike_analyzeMaster(b64, f.name);
-        };
-        reader.readAsDataURL(f);
       }
     </script>
   </body>
