@@ -1,18 +1,18 @@
 /**
- * Website class-schedule generator (GAS side).
+ * Class-schedule generator (GAS side).
  *
  * Builds the schedule from the uploaded Master + Register (the only data
  * sources) and rewrites a single canonical Google Doc with a stable PDF-export
  * URL. Teacher/level come from the Register, day/time + enrolment from the
- * Master; capacity/fee/term come from the roster config (rendered "—" until the
- * org supplies them — never taken from the website). Reads only.
+ * Master, capacity from the two supplied fields. Story Time classes are detected
+ * from the data (Summary "Children" teachers + kids level markers); conflicts are
+ * returned as warnings. Fee and term/weeks are skipped for now. Reads only.
  */
 
 import { parseMasterGrid } from '../ingest/master';
-import { parseRegisterTabs } from '../ingest/register';
+import { parseRegisterTabs, parseChildrenTeachers } from '../ingest/register';
 import { uploadedXlsxToSheetId, trashSheet, sheetToStringGrid } from '../ingest/xlsx';
 import { buildSchedule, ScheduleRow } from './build';
-import { CLASS_ROSTER } from './roster';
 import { logAdmin } from '../log';
 
 const SCHEDULE_DOC_ID_PROPERTY = 'SCHEDULE_DOC_ID';
@@ -25,6 +25,7 @@ export interface ScheduleResult {
   pdfUrl?: string;
   generatedAt?: string;
   rows?: ScheduleRow[];
+  warnings?: string[];
 }
 
 /** Picks the current-year Master tab (same tolerant selection as the sync). */
@@ -48,11 +49,6 @@ function openOrCreateScheduleDoc(): GoogleAppsScript.Document.Document {
   const doc = DocumentApp.create(SCHEDULE_DOC_NAME);
   props.setProperty(SCHEDULE_DOC_ID_PROPERTY, doc.getId());
   return doc;
-}
-
-/** "—" for unknown numbers so the table never shows a misleading 0/blank. */
-function dash(v: number | null): string {
-  return v == null ? '—' : String(v);
 }
 
 /**
@@ -84,10 +80,17 @@ function generateSchedule(
     if (masterParse.error) return { success: false, error: `Master file: ${masterParse.error}` };
 
     registerSheetId = uploadedXlsxToSheetId(registerB64, registerName, 'schedule-register');
-    const registerGrids = SpreadsheetApp.openById(registerSheetId).getSheets().map((s) => sheetToStringGrid(s));
+    const registerSheets = SpreadsheetApp.openById(registerSheetId).getSheets();
+    const registerGrids = registerSheets.map((s) => sheetToStringGrid(s));
     const register = parseRegisterTabs(registerGrids);
 
-    const rows = buildSchedule(CLASS_ROSTER, masterParse.members, register, capacities, new Date());
+    // Story Time teachers come from the Register "Summary" tab (or any tab that has the list).
+    const summarySheet = registerSheets.find((s) => /summary/i.test(s.getName()));
+    const childrenTeachers = summarySheet
+      ? parseChildrenTeachers(sheetToStringGrid(summarySheet))
+      : new Set<string>();
+
+    const { rows, warnings } = buildSchedule(masterParse.members, register, capacities, childrenTeachers, new Date());
 
     const doc = openOrCreateScheduleDoc();
     const body = doc.getBody();
@@ -96,16 +99,15 @@ function generateSchedule(
     const generatedAt = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'd MMM yyyy, HH:mm');
     body.appendParagraph('CCB English Conversation Classes').setHeading(DocumentApp.ParagraphHeading.TITLE);
 
-    const tableRows: string[][] = [['Class', 'Day / Time', 'Teacher', 'Level', 'Places Available', 'Weeks Left', 'Fee']];
+    const tableRows: string[][] = [['Class', 'Day / Time', 'Teacher', 'Level', 'Enrolled', 'Places Available']];
     for (const r of rows) {
       tableRows.push([
         r.id,
         r.dayTime || '—',
         r.teacher || '—',
         r.level || '—',
+        `${r.enrolled} / ${r.capacity}`,
         r.placesAvailable === 0 ? 'Full' : String(r.placesAvailable),
-        dash(r.weeksLeft),
-        r.fee || '—',
       ]);
     }
     const table = body.appendTable(tableRows);
@@ -123,10 +125,11 @@ function generateSchedule(
     const pdfUrl = `https://docs.google.com/document/d/${doc.getId()}/export?format=pdf`;
 
     logAdmin(
-      `Generated class schedule: ${rows.length} classes (${masterParse.members.length} enrolments; capacity ${capacities.general}/story ${capacities.story})`
+      `Generated class schedule: ${rows.length} classes (${masterParse.members.length} enrolments; ` +
+        `capacity ${capacities.general}/story ${capacities.story}; ${warnings.length} warning(s))`
     );
 
-    return { success: true, docUrl: doc.getUrl(), pdfUrl, generatedAt, rows };
+    return { success: true, docUrl: doc.getUrl(), pdfUrl, generatedAt, rows, warnings };
   } catch (e) {
     return { success: false, error: String(e) };
   } finally {

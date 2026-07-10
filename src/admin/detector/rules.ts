@@ -14,6 +14,7 @@
 import { Finding, FindingCode, Tier, Engine } from './types';
 import { ReconContext } from './match';
 import { nameKey, emailKey, isEmailShaped } from './normalize';
+import { splitClassIds } from '../classid';
 
 /** Statuses that mean "this person is leaving / has left". */
 const DROPOUT_STATUS = /drop|non.?renew|resign|left|quit|cancel|withdraw/i;
@@ -28,26 +29,6 @@ function isLikelyDependent(rawName: string): boolean {
   return /\bmother\b|\bfather\b|\bparent\b|m[eè]re|p[eè]re|maman|\d+\s*ans\b|\//i.test(rawName);
 }
 
-/** Normalizes a class id for comparison ("8 A" ⇄ "8a", "11 & 12" ⇄ "11&12"). */
-function normClass(c: string): string {
-  return c.toLowerCase().replace(/\s+/g, '');
-}
-
-/** Splits a (normalized) class id into its components — "11&12" → ["11","12"]. */
-function classComponents(norm: string): string[] {
-  return norm.split('&').filter(Boolean);
-}
-
-/**
- * True if two class ids refer to the same class allowing for combined groupings:
- * a Register "11" agrees with a Master "11&12" (and vice versa) because they
- * share a component. Genuinely different classes ("1" vs "2") share none.
- */
-function classesOverlap(a: string, b: string): boolean {
-  const ca = classComponents(a);
-  const cb = classComponents(b);
-  return ca.some((x) => cb.includes(x));
-}
 
 /** Builds a finding with a stable, resolution-friendly key from its subjects. */
 function make(
@@ -243,39 +224,40 @@ function statusContradictions(ctx: ReconContext): Finding[] {
 /** ⚠️ Class-assignment problems: nonexistent class, or Master vs Register disagreement. */
 function classChecks(ctx: ReconContext): Finding[] {
   const out: Finding[] = [];
-  const valid = new Set(ctx.input.roster.validClassIds.map(normClass));
+  // A roster class id may itself be combined; expand so "11" and "12" are valid.
+  const valid = new Set(ctx.input.roster.validClassIds.flatMap(splitClassIds));
 
   for (const m of ctx.input.master) {
-    const mc = normClass(m.classNumber);
-    if (!mc) continue;
+    // A Master class number can name multiple classes ("11 & 12" = both 11 and 12).
+    const mClasses = splitClassIds(m.classNumber);
+    if (mClasses.length === 0) continue;
 
-    // Valid if the id is known outright, or every component of a combined id is
-    // known ("11&12" is fine when the roster has "11" and "12" separately).
-    const known = valid.has(mc) || classComponents(mc).every((c) => valid.has(c));
-    if (valid.size > 0 && !known) {
+    const unknown = mClasses.filter((c) => !valid.has(c));
+    if (valid.size > 0 && unknown.length > 0) {
       out.push(
         make(
           'nonexistent-class',
           'confirm',
           'rule',
-          `"${m.rawName}" is assigned to class "${m.classNumber}", which isn't in the canonical class roster. Fix the class or update the roster.`,
+          `"${m.rawName}" is assigned to class "${m.classNumber}", which isn't in the canonical class roster (unknown: ${unknown.join(', ')}). Fix the class or update the roster.`,
           [m.rawName],
           `Master row ${m.rowNumber}`
         )
       );
     }
 
-    const regRows = ctx.registerByNameKey.get(nameKey(m.rawName)) || [];
-    // A disagreement is a Register class that shares NO component with the
-    // Master's — so "11" vs "11&12" is agreement, "1" vs "2" is a real conflict.
-    const disagreeing = regRows.find((r) => r.classId && !classesOverlap(normClass(r.classId), mc));
-    if (disagreeing) {
+    // Disagreement only when NONE of the person's Register classes is one of
+    // their Master classes — so someone in "11 & 12" whom the Register shows in
+    // class 11 agrees (they're genuinely in two classes; an extra Register class
+    // isn't a conflict). A totally different class ("9" vs "4") is a real conflict.
+    const regClasses = [...new Set((ctx.registerByNameKey.get(nameKey(m.rawName)) || []).flatMap((r) => splitClassIds(r.classId)))];
+    if (regClasses.length > 0 && !regClasses.some((rc) => mClasses.includes(rc))) {
       out.push(
         make(
           'class-disagreement',
           'confirm',
           'rule',
-          `"${m.rawName}" is class "${m.classNumber}" in the Master but "${disagreeing.classId}" in the Register. Class assignment is authoritative from the Master — confirm and fix the Register if needed.`,
+          `"${m.rawName}" is class "${m.classNumber}" in the Master but the Register has them in "${regClasses.join(', ')}". Class assignment is authoritative from the Master — confirm and fix the Register if needed.`,
           [m.rawName],
           `Master row ${m.rowNumber}`
         )

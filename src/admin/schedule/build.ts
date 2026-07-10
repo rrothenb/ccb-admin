@@ -1,22 +1,27 @@
 /**
- * Website class-schedule builder (pure).
+ * Class-schedule builder (pure).
  *
- * Everything is derived from the uploaded spreadsheets ONLY (the website is never
- * a data source):
+ * Everything comes from the uploaded spreadsheets ONLY — nothing is hardcoded:
  *   - teacher, level      ← Register ("Class N / Teacher" + level cell)
  *   - day/time, enrolled  ← Master (DAY/TIME column; count of CLASS NUMBER)
- * The roster config supplies the static facts NOT present in any spreadsheet
- * (capacity / fee / term); those stay null/'' until the org provides them, and
- * render as "—" — they are NOT taken from the website.
+ *   - which classes exist  ← the union of classes seen in Master + Register
  *
- * Places Available = capacity − enrolled (only when capacity is known); Weeks
- * Left is calendar math from the term dates. Pure module (no GAS).
+ * Capacity is the one thing not in the sheets, so it's supplied at generation
+ * time (a general capacity + a Story Time capacity). Story Time (children's)
+ * classes are recognized from the DATA via two signals, and a warning is raised
+ * when they disagree:
+ *   (1) the teacher is listed as "Children" in the Register Summary tab;
+ *   (2) the class level cell has a kids age-marker ("6/7 yrs", "7Yrs").
+ *
+ * Fee and term/weeks are not in the sheets and are skipped for now.
+ * Pure module (no GAS).
  */
 
 import { MasterRow, RegisterRow } from '../detector/types';
-import { RosterClass } from './roster';
+import { splitClassIds } from '../classid';
+import { KIDS_LEVEL_RE } from '../ingest/register';
 
-/** One row of the rendered schedule. Fee/term-derived values may be unknown (''/null). */
+/** One row of the rendered schedule. */
 export interface ScheduleRow {
   id: string;
   dayTime: string;
@@ -25,22 +30,24 @@ export interface ScheduleRow {
   enrolled: number;
   capacity: number;
   placesAvailable: number;
-  fee: string;
-  totalWeeks: number | null;
-  weeksLeft: number | null;
+  storyTime: boolean;
 }
 
-/** Capacities supplied at generation time (defaults calibrated from enrolment + observed places). */
+/** Capacities supplied at generation time. */
 export interface Capacities {
   general: number;
   story: number;
 }
 
-const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
+/** Build output: the rows plus any advisory warnings (e.g. Story Time signal conflicts). */
+export interface ScheduleBuild {
+  rows: ScheduleRow[];
+  warnings: string[];
+}
 
-/** Normalizes a class id for keying/matching ("8 A" → "8a", "11 & 12" → "11&12"). */
-function normClassId(c: string): string {
-  return c.toLowerCase().replace(/\s+/g, '');
+/** First name (lowercased) of a teacher, for matching against the Summary's Children list. */
+function firstName(name: string): string {
+  return (name || '').trim().toLowerCase().split(/\s+/)[0] || '';
 }
 
 /** Returns the most frequent non-empty value in a list, or '' if none. */
@@ -72,14 +79,16 @@ interface ClassInfo {
 
 /** Derives per-class teacher/level (Register) + enrolled/dayTime (Master), keyed by normalized id. */
 export function deriveClassInfo(master: MasterRow[], register: RegisterRow[]): Map<string, ClassInfo> {
-  const groupByClass = <T>(items: T[], keyOf: (t: T) => string): Map<string, T[]> => {
+  // A class-number cell can name several classes ("11 & 12"); an item counts
+  // toward EACH of its classes, so classes 11 and 12 both get the member.
+  const groupByClass = <T>(items: T[], rawOf: (t: T) => string): Map<string, T[]> => {
     const m = new Map<string, T[]>();
     for (const it of items) {
-      const k = normClassId(keyOf(it));
-      if (!k) continue;
-      const arr = m.get(k);
-      if (arr) arr.push(it);
-      else m.set(k, [it]);
+      for (const k of splitClassIds(rawOf(it))) {
+        const arr = m.get(k);
+        if (arr) arr.push(it);
+        else m.set(k, [it]);
+      }
     }
     return m;
   };
@@ -102,18 +111,7 @@ export function deriveClassInfo(master: MasterRow[], register: RegisterRow[]): M
   return info;
 }
 
-/** Whole weeks remaining in a term, or null when the term dates are unknown. */
-export function weeksLeft(termStart: string, totalWeeks: number | null, now: Date): number | null {
-  if (!termStart || totalWeeks == null) return null;
-  const start = new Date(termStart);
-  if (isNaN(start.getTime())) return null;
-  const end = start.getTime() + totalWeeks * MS_PER_WEEK;
-  if (now.getTime() >= end) return 0;
-  if (now.getTime() <= start.getTime()) return totalWeeks;
-  return Math.ceil((end - now.getTime()) / MS_PER_WEEK);
-}
-
-/** Sorts class ids by their leading number, then lexically ("1","2","8a","8b","11","11&12","12"). */
+/** Sorts class ids by their leading number, then lexically ("1","2","8a","8b","11","12"). */
 function byClassOrder(a: ScheduleRow, b: ScheduleRow): number {
   const na = parseInt(a.id, 10);
   const nb = parseInt(b.id, 10);
@@ -126,41 +124,47 @@ function byClassOrder(a: ScheduleRow, b: ScheduleRow): number {
 }
 
 /**
- * Builds the schedule rows. Classes are the union of the roster and any class
- * seen in the live data (so a class present in the data but missing from the
- * roster still appears, just without capacity/fee/term).
+ * Builds the schedule from the uploaded data + the two capacities. `childrenTeachers`
+ * is the set of Story Time teacher first names parsed from the Register Summary tab.
  */
 export function buildSchedule(
-  roster: RosterClass[],
   master: MasterRow[],
   register: RegisterRow[],
   capacities: Capacities,
-  now: Date = new Date()
-): ScheduleRow[] {
+  childrenTeachers: Set<string>,
+  _now: Date = new Date()
+): ScheduleBuild {
   const info = deriveClassInfo(master, register);
-  const rosterById = new Map(roster.map((r) => [normClassId(r.id), r]));
-
-  const ids = new Set<string>([...rosterById.keys(), ...info.keys()]);
   const rows: ScheduleRow[] = [];
-  for (const id of ids) {
-    const r = rosterById.get(id);
-    const live = info.get(id) || { teacher: '', level: '', dayTime: '', enrolled: 0 };
-    // Story Time classes use the smaller capacity; everything else the general one.
-    const capacity = r && r.storyTime ? capacities.story : capacities.general;
-    const placesAvailable = Math.max(0, capacity - live.enrolled);
+  const warnings: string[] = [];
+
+  for (const [id, live] of info) {
+    // Story Time signals: (1) teacher is a "Children" teacher per the Summary,
+    // (2) the level cell carries a kids age-marker. Warn if they disagree.
+    const byTeacher = live.teacher ? childrenTeachers.has(firstName(live.teacher)) : false;
+    const byLevel = KIDS_LEVEL_RE.test(live.level);
+    const storyTime = byTeacher || byLevel;
+    if (byTeacher !== byLevel) {
+      warnings.push(
+        `Class ${id} (${live.teacher || '?'}): Story Time signals disagree — ` +
+          `teacher-category says ${byTeacher ? 'yes' : 'no'}, level "${live.level || '—'}" says ${byLevel ? 'yes' : 'no'}. ` +
+          `Treating as ${storyTime ? 'Story Time' : 'adult'}; please confirm.`
+      );
+    }
+
+    const capacity = storyTime ? capacities.story : capacities.general;
     rows.push({
       id,
-      dayTime: (r && r.dayTimeOverride) || live.dayTime,
+      dayTime: live.dayTime,
       teacher: live.teacher,
       level: live.level,
       enrolled: live.enrolled,
       capacity,
-      placesAvailable,
-      fee: r ? r.fee : '',
-      totalWeeks: r ? r.totalWeeks : null,
-      weeksLeft: r ? weeksLeft(r.termStart, r.totalWeeks, now) : null,
+      placesAvailable: Math.max(0, capacity - live.enrolled),
+      storyTime,
     });
   }
 
-  return rows.sort(byClassOrder);
+  rows.sort(byClassOrder);
+  return { rows, warnings };
 }

@@ -1,19 +1,14 @@
-import { buildSchedule, deriveClassInfo, weeksLeft } from './build';
-import { RosterClass } from './roster';
+import { buildSchedule, deriveClassInfo } from './build';
 import { MasterRow, RegisterRow } from '../detector/types';
 
-const NOW = new Date('2026-10-01');
-
 function m(classNumber: string, over: Partial<MasterRow> = {}): MasterRow {
-  return { rawName: 'X', enrolDate: '', classNumber, dayTime: 'Monday 10h00-12h00', status: 'active', renewalType: '', rowNumber: 2, ...over };
+  return { rawName: 'X', enrolDate: '', classNumber, dayTime: 'Mon - 15h00', status: 'active', renewalType: '', rowNumber: 2, ...over };
 }
 function r(classId: string, over: Partial<RegisterRow> = {}): RegisterRow {
-  return { rawName: 'Y', email: '', classId, teacher: 'Sue', level: 'B1', ...over };
-}
-function rc(id: string, over: Partial<RosterClass> = {}): RosterClass {
-  return { id, fee: '', totalWeeks: null, termStart: '', ...over };
+  return { rawName: 'Y', email: '', classId, teacher: 'Paula', level: 'Intermediate (B1+)', ...over };
 }
 const CAP = { general: 10, story: 8 };
+const NONE = new Set<string>();
 
 describe('deriveClassInfo (from the spreadsheets only)', () => {
   it('counts enrolled from Master and reads teacher/level from Register', () => {
@@ -22,59 +17,53 @@ describe('deriveClassInfo (from the spreadsheets only)', () => {
     expect(info.get('2')!.enrolled).toBe(1);
   });
 
-  it('normalizes combined/spaced class ids', () => {
-    const info = deriveClassInfo([m('11 & 12')], [r('11&12')]);
-    expect(info.has('11&12')).toBe(true);
-  });
-
-  it('takes the modal DAY/TIME across the class members', () => {
-    const info = deriveClassInfo(
-      [m('1', { dayTime: 'Tue 9h' }), m('1', { dayTime: 'Tue 9h' }), m('1', { dayTime: 'typo' })],
-      []
-    );
-    expect(info.get('1')!.dayTime).toBe('Tue 9h');
+  it('splits "11 & 12" so the member counts in both class 11 and class 12', () => {
+    const info = deriveClassInfo([m('11 & 12')], [r('11'), r('12')]);
+    expect(info.get('11')!.enrolled).toBe(1);
+    expect(info.get('12')!.enrolled).toBe(1);
+    expect(info.has('11&12')).toBe(false);
   });
 });
 
-describe('weeksLeft', () => {
-  it('is null when term dates are unknown (not in the spreadsheets)', () => {
-    expect(weeksLeft('', 10, NOW)).toBeNull();
-    expect(weeksLeft('2026-09-01', null, NOW)).toBeNull();
-  });
-});
-
-describe('buildSchedule', () => {
-  it('derives teacher/level/day-time/enrolment from the uploads', () => {
-    const rows = buildSchedule([rc('1')], [m('1'), m('1')], [r('1', { teacher: 'Ann', level: 'B2' })], CAP, NOW);
-    expect(rows[0]).toMatchObject({ id: '1', teacher: 'Ann', level: 'B2', enrolled: 2 });
+describe('buildSchedule — capacity + places', () => {
+  it('uses the general capacity for adult classes', () => {
+    const { rows } = buildSchedule([m('1'), m('1'), m('1')], [r('1')], CAP, NONE);
+    expect(rows[0]).toMatchObject({ capacity: 10, enrolled: 3, placesAvailable: 7, storyTime: false });
   });
 
-  it('computes places = general capacity − enrolled for a normal class', () => {
-    const rows = buildSchedule([rc('1')], [m('1'), m('1'), m('1')], [r('1')], CAP, NOW);
-    expect(rows[0].capacity).toBe(10);
-    expect(rows[0].placesAvailable).toBe(7);
-  });
-
-  it('uses the Story Time capacity for flagged classes', () => {
-    const rows = buildSchedule([rc('8a', { storyTime: true })], [m('8a'), m('8a')], [r('8a')], CAP, NOW);
-    expect(rows[0].capacity).toBe(8);
-    expect(rows[0].placesAvailable).toBe(6);
-  });
-
-  it('never goes negative (over-capacity shows 0 places)', () => {
-    const rows = buildSchedule([rc('9')], Array.from({ length: 12 }, () => m('9')), [r('9')], CAP, NOW);
+  it('never goes negative (over capacity → 0 places)', () => {
+    const { rows } = buildSchedule(Array.from({ length: 12 }, () => m('9')), [r('9')], CAP, NONE);
     expect(rows[0].placesAvailable).toBe(0);
   });
+});
 
-  it('leaves Weeks/Fee unknown (null/"") when the roster has no term/fee', () => {
-    const rows = buildSchedule([rc('1')], [m('1')], [r('1')], CAP, NOW);
-    expect(rows[0].weeksLeft).toBeNull();
-    expect(rows[0].fee).toBe('');
+describe('buildSchedule — Story Time detection', () => {
+  it('flags a class whose teacher is a "Children" teacher (signal 1)', () => {
+    const children = new Set(['rebecca']);
+    const { rows, warnings } = buildSchedule([m('8a'), m('8a')], [r('8a', { teacher: 'Rebecca', level: '6/7 yrs - Good English' })], CAP, children);
+    expect(rows[0]).toMatchObject({ storyTime: true, capacity: 8, placesAvailable: 6 });
+    expect(warnings).toHaveLength(0); // both signals agree
   });
 
-  it('includes a class present in the data but missing from the roster (general capacity)', () => {
-    const rows = buildSchedule([rc('1')], [m('1'), m('99')], [r('1'), r('99')], CAP, NOW);
-    expect(rows.map((x) => x.id)).toEqual(['1', '99']);
-    expect(rows.find((x) => x.id === '99')!.capacity).toBe(10);
+  it('flags a class whose level has a kids age-marker (signal 2)', () => {
+    const { rows } = buildSchedule([m('8b')], [r('8b', { teacher: 'Rebecca', level: '5 ans' })], CAP, NONE);
+    expect(rows[0].storyTime).toBe(true);
+    expect(rows[0].capacity).toBe(8);
+  });
+
+  it('warns when the two signals disagree', () => {
+    const children = new Set(['rebecca']);
+    // teacher says Children, but the level looks adult → disagreement
+    const { rows, warnings } = buildSchedule([m('8a')], [r('8a', { teacher: 'Rebecca', level: 'Intermediate (B1+)' })], CAP, children);
+    expect(rows[0].storyTime).toBe(true); // OR of the two signals
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/signals disagree/i);
+  });
+
+  it('leaves an ordinary adult class untouched (no signal)', () => {
+    const { rows, warnings } = buildSchedule([m('1')], [r('1', { teacher: 'Hannah', level: 'Intermediate (B1+)' })], CAP, NONE);
+    expect(rows[0].storyTime).toBe(false);
+    expect(rows[0].capacity).toBe(10);
+    expect(warnings).toHaveLength(0);
   });
 });

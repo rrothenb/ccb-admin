@@ -1,4 +1,4 @@
-import { parseRegisterGrid, parseRegisterTabs } from './register';
+import { parseRegisterGrid, parseRegisterTabs, parseChildrenTeachers } from './register';
 
 describe('parseRegisterGrid — standard roster grid', () => {
   const grid = [
@@ -76,6 +76,38 @@ describe('parseRegisterGrid — robustness', () => {
     const grid = [['Class 9 / Lee'], ['Noemail, Nadia', 'P', 'P']];
     const rows = parseRegisterGrid(grid);
     expect(rows[0]).toMatchObject({ rawName: 'Noemail, Nadia', email: '' });
+  });
+});
+
+describe('level capture', () => {
+  it('captures an adult level beside the time', () => {
+    const grid = [['Wednesday', 'Class 3 / Paula'], ['14.00-15.00', 'Intermediate (B1+)', '2026'], ['1', 'Bal, Sylvie', 's@ex.fr']];
+    expect(parseRegisterGrid(grid)[0].level).toBe('Intermediate (B1+)');
+  });
+
+  it('captures the kids age-line a couple rows below the header (Rebecca layout)', () => {
+    const grid = [
+      ['Class 8a / Rebecca', '30 Sept'],
+      ['16 Sept', '23 Sept', '30 Sept'],
+      ['6/7 yrs - Good English', 'Michelle'],
+      ['30', '29', '28'],
+      ['1', 'Petit, Zoé', 'parent@ex.fr'],
+    ];
+    expect(parseRegisterGrid(grid)[0].level).toBe('6/7 yrs - Good English');
+  });
+});
+
+describe('parseChildrenTeachers (Summary tab)', () => {
+  it('extracts the first names of teachers marked "Children"', () => {
+    const grid = [
+      ['', 'Paula Norman', 'Adult', '5'],
+      ['', 'Rebecca Grossberg', 'Children', '2'],
+      ['', 'Hannah Rice', 'Adult', '4'],
+    ];
+    const set = parseChildrenTeachers(grid);
+    expect(set.has('rebecca')).toBe(true);
+    expect(set.has('paula')).toBe(false);
+    expect(set.size).toBe(1);
   });
 });
 

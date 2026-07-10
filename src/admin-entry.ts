@@ -26,7 +26,7 @@ import { setAuditLogSpreadsheetId, getAuditLogSpreadsheetId } from './services/a
 
 import { generateCatalogue } from './admin/catalogue/generate';
 
-import { runMembershipSync, resolveFinding, unresolveFinding } from './admin/sync';
+import { runMembershipSync } from './admin/sync';
 
 import { generateSchedule } from './admin/schedule/generate';
 
@@ -116,8 +116,6 @@ function clearConfig(): void {
 
 // Sync functions
 (globalThis as Record<string, unknown>).runMembershipSync = runMembershipSync;
-(globalThis as Record<string, unknown>).resolveFinding = resolveFinding;
-(globalThis as Record<string, unknown>).unresolveFinding = unresolveFinding;
 
 // Website generation
 (globalThis as Record<string, unknown>).generateCatalogue = generateCatalogue;

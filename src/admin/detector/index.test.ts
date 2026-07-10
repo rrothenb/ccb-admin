@@ -50,32 +50,19 @@ describe('runDetector — gate + ordering', () => {
   });
 });
 
-describe('runDetector — resolution memory', () => {
-  it('suppresses a previously resolved confirm finding', () => {
+describe('runDetector — stateless (every run is fresh)', () => {
+  it('produces the same findings on repeated runs (no suppression)', () => {
     const inp = input({ master: [master('Martin, Louise')], app: [app('B1', 'Martin, Louisa')] });
     const first = runDetector(inp, { now: NOW });
-    const fuzzy = first.findings.find((f) => f.code === 'fuzzy-name-match')!;
-    expect(fuzzy).toBeTruthy();
-
-    const second = runDetector(inp, { now: NOW, resolvedKeys: [fuzzy.key] });
-    expect(second.findings.find((f) => f.code === 'fuzzy-name-match')).toBeUndefined();
+    const second = runDetector(inp, { now: NOW });
+    expect(second.findings.map((f) => f.code)).toEqual(first.findings.map((f) => f.code));
+    expect(second.findings.some((f) => f.code === 'fuzzy-name-match')).toBe(true);
   });
 
-  it('never suppresses a block finding, even if its key is marked resolved', () => {
-    const inp = input({
-      app: [app('B1', 'Dupe, Alex', 'a@ex.fr'), app('B2', 'Dupe, Alex', 'b@ex.fr')],
-    });
-    const first = runDetector(inp, { now: NOW });
-    const block = first.findings[0];
-    const second = runDetector(inp, { now: NOW, resolvedKeys: [block.key] });
-    expect(second.canSync).toBe(false);
-    expect(second.findings.some((f) => f.key === block.key)).toBe(true);
-  });
-
-  it('keeps finding keys stable across runs for the same issue', () => {
+  it('de-duplicates findings that share a key', () => {
     const inp = input({ master: [master('New, Guy')], app: [] });
-    const a = runDetector(inp, { now: NOW }).findings[0].key;
-    const b = runDetector(inp, { now: NOW }).findings[0].key;
-    expect(a).toBe(b);
+    const r = runDetector(inp, { now: NOW });
+    const keys = r.findings.map((f) => f.key);
+    expect(new Set(keys).size).toBe(keys.length);
   });
 });

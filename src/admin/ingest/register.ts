@@ -23,8 +23,13 @@ import { RegisterRow } from '../detector/types';
 /** An email anywhere in a cell (permissive — the grid has stray punctuation). */
 const EMAIL_RE = /[^\s,;<>()]+@[^\s,;<>()]+\.[^\s,;<>()]+/;
 
-/** "Class 1", "Class 8a", "Class 11 & 12" — captures the id, tolerating spacing. */
-const CLASS_HEADER_RE = /class\s*([0-9]+\s*[a-z]?(?:\s*&\s*[0-9]+\s*[a-z]?)?)/i;
+/**
+ * "Class 1", "Class 8a", "Class 11 & 12" — captures the id, tolerating spacing.
+ * Anchored to the START of the cell so a real header ("Class 9 / Paula") matches
+ * but an in-cell mention in a comment ("From Class 4", "moved to Class 7") does
+ * NOT — otherwise a stray comment would switch the class context mid-block.
+ */
+const CLASS_HEADER_RE = /^\s*class\s*([0-9]+\s*[a-z]?(?:\s*&\s*[0-9]+\s*[a-z]?)?)/i;
 
 /** Recognizable level tokens (CEFR + plain-English + kids). Best-effort. */
 const LEVEL_RE =
@@ -69,13 +74,51 @@ function parseClassHeader(row: string[]): { classId: string; teacher: string } |
   return null;
 }
 
-/** Finds a level token anywhere in a row, or '' — used on the header row and the row below it. */
-function findLevel(row: string[]): string {
-  for (const cell of row) {
-    const m = LEVEL_RE.exec(cell);
-    if (m) return m[0];
+/** Kids age-marker in a level/description cell: "6/7 yrs", "7Yrs", "7 ans". */
+export const KIDS_LEVEL_RE = /\b\d+\s*(?:\/\s*\d+\s*)?(?:yrs?|years?|ans)\b/i;
+
+/**
+ * Captures the class's level/description cell. Adult tabs put it beside the time
+ * ("U Intermediate (B2+)"); the kids layout puts it a couple rows below the
+ * header ("6/7 yrs - Good English"). Scans a small window after the header for
+ * the first cell that reads as a level (CEFR/named) or a kids age line, stopping
+ * once the student rows (which carry emails) begin. Returns the whole cell.
+ */
+function detectLevel(grid: string[][], headerRow: number): string {
+  for (let r = headerRow; r < Math.min(headerRow + 6, grid.length); r++) {
+    const row = grid[r];
+    if (r > headerRow && row.some((c) => c.includes('@'))) break; // student rows started
+    for (const cell of row) {
+      const t = cell.trim();
+      if (LEVEL_RE.test(t) || KIDS_LEVEL_RE.test(t)) return t;
+    }
   }
   return '';
+}
+
+/**
+ * Parses the Register **Summary** tab's professor list for the teachers marked
+ * "Children" (vs "Adult"), returning their first names (lowercased). Used to
+ * recognize the Story Time / children's classes. E.g. a row
+ * `[…, "Rebecca Grossberg", "Children", "2"]` → adds "rebecca".
+ */
+export function parseChildrenTeachers(grid: string[][]): Set<string> {
+  const out = new Set<string>();
+  for (const row of grid) {
+    for (let i = 0; i < row.length; i++) {
+      if (!/^children$/i.test((row[i] || '').trim())) continue;
+      // The teacher name is the nearest non-empty cell to the left.
+      for (let j = i - 1; j >= 0; j--) {
+        const name = (row[j] || '').trim();
+        if (name) {
+          const first = name.toLowerCase().split(/\s+/)[0];
+          if (first) out.add(first);
+          break;
+        }
+      }
+    }
+  }
+  return out;
 }
 
 /** True if a cell plausibly holds a person's name (letters + comma or two words), not a mark/header. */
@@ -83,6 +126,8 @@ function looksLikeName(cell: string): boolean {
   const s = cell.trim();
   if (s.length < 2 || NON_NAME_RE.test(s)) return false;
   if (EMAIL_RE.test(s)) return false;
+  // Annotation/comment cells that mention a class ("From Class 4") aren't people.
+  if (/\bclass\b/i.test(s)) return false;
   if (!/[a-zA-Z]{2,}/.test(s)) return false; // needs a real word, not "X"/"1"/a date
   // A "Surname, First" has a comma; a "First Last" has a space between two words.
   return /,/.test(s) || /[a-zA-Z]{2,}\s+[a-zA-Z]/.test(s);
@@ -127,9 +172,7 @@ export function parseRegisterGrid(grid: string[][]): RegisterRow[] {
 
     const header = parseClassHeader(row);
     if (header) {
-      // Level may be on the header row or the row directly below it.
-      const level = findLevel(row) || (r + 1 < grid.length ? findLevel(grid[r + 1]) : '');
-      ctx = { ...header, level };
+      ctx = { ...header, level: detectLevel(grid, r) };
       continue;
     }
 

@@ -24,7 +24,6 @@
       .finding.confirm { border-left-color: #e8a800; }
       .finding.fyi { border-left-color: #0b57d0; }
       .finding .meta { font-size: 0.8rem; color: #666; margin-top: 0.2rem; }
-      .finding button.resolve { font-size: 0.8rem; padding: 0.2rem 0.5rem; background: #fff; color: #0b57d0; border-color: #0b57d0; margin-top: 0.3rem; }
       .tierhead { font-weight: 600; margin: 1rem 0 0.25rem; }
       .scrolllist { max-height: 380px; overflow: auto; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 0.75rem; }
       .plantable { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
@@ -60,8 +59,8 @@
         Reconciles the Master + Register against the app's members and returns a
         tiered worklist. It makes no changes — expiry writes and the
         Contacts/website projection come after the worklist is clear. 🛑 items
-        block the sync; ⚠️ need your confirmation; ℹ️ are informational.
-        Resolving a ⚠️/ℹ️ item hides it on future runs.
+        block the sync; ⚠️ need your confirmation; ℹ️ are informational. Take each
+        one seriously; if you fix anything in the spreadsheets, just re-run.
       </p>
       <button id="syncBtn" onclick="runSync()">Run detection</button>
       <div id="syncResult" class="result"></div>
@@ -85,11 +84,14 @@
     <div class="card">
       <h2 style="font-size:1.1rem;margin-top:0">Website class schedule</h2>
       <p class="muted">
-        Upload the Master and Register to rebuild the class-schedule table into a
-        Google Doc with a stable PDF link. Teacher/level (Register), day/time and
-        enrolment (Master) are read live from the spreadsheets. Places Available /
-        Weeks Left / Fee need capacity/term/fee, which aren't in the spreadsheets,
-        so they show “—” until supplied. Reads only — no changes to the spreadsheets.
+        Rebuilds the class-schedule table into a Google Doc with a stable PDF link,
+        from the uploaded spreadsheets only. Teacher/level come from the Register,
+        day/time and enrolment from the Master, and the class list is whatever the
+        data contains. Story Time (children's) classes are detected from the data
+        (Summary "Children" teachers + kids age levels) and use the Story Time
+        capacity; you'll get a ⚠️ warning if those two signals disagree. Capacity
+        isn't in the sheets, so set it here. (Fee and term/weeks are skipped for now.)
+        Reads only — no changes to the spreadsheets.
       </p>
       <div class="field"><label for="genCap">Class capacity</label><input type="number" id="genCap" value="10" min="1" style="width:5rem" /></div>
       <div class="field"><label for="storyCap">Story Time capacity</label><input type="number" id="storyCap" value="8" min="1" style="width:5rem" /></div>
@@ -202,12 +204,9 @@
       function renderFinding(f) {
         var meta = TIER_META[f.tier] || TIER_META.fyi;
         var loc = f.location ? '<span> · ' + escapeHtml(f.location) + '</span>' : '';
-        var resolveBtn = f.tier === 'block' ? '' :
-          '<button class="resolve" onclick="resolveFinding(\'' + encodeURIComponent(f.key) + '\', this)">Mark resolved</button>';
         return '<div class="finding ' + f.tier + '">' +
           '<div>' + meta.icon + ' ' + escapeHtml(f.message) + '</div>' +
           '<div class="meta">' + escapeHtml(f.code) + ' · ' + escapeHtml(f.engine) + loc + '</div>' +
-          resolveBtn +
           '</div>';
       }
 
@@ -236,19 +235,6 @@
         });
         if (!report.findings.length) html += '<p class="muted">No findings.</p>';
         out.innerHTML = html;
-      }
-
-      function resolveFinding(encodedKey, btn) {
-        btn.disabled = true;
-        btn.textContent = 'Resolving…';
-        google.script.run
-          .withSuccessHandler(function (r) {
-            var finding = btn.closest('.finding');
-            if (r && r.success) { finding.parentNode.removeChild(finding); }
-            else { btn.disabled = false; btn.textContent = 'Mark resolved'; }
-          })
-          .withFailureHandler(function () { btn.disabled = false; btn.textContent = 'Mark resolved'; })
-          .resolveFinding(decodeURIComponent(encodedKey));
       }
 
       function runSync() {
@@ -392,18 +378,23 @@
                 var places = r.placesAvailable === 0
                   ? '<span style="color:#c0391b;font-weight:600">Full</span>'
                   : r.placesAvailable;
+                var story = r.storyTime ? ' <span class="muted">(Story Time)</span>' : '';
                 return '<tr><td class="nowrap">' + escapeHtml(r.id) + '</td><td class="nowrap">' + cell(r.dayTime) +
-                       '</td><td class="nowrap">' + cell(r.teacher) + '</td><td>' + cell(r.level) +
-                       '</td><td class="nowrap">' + r.enrolled + '/' + r.capacity + '</td><td class="nowrap">' + places +
-                       '</td><td class="nowrap">' + cell(r.weeksLeft) + '</td><td class="nowrap">' + cell(r.fee) + '</td></tr>';
+                       '</td><td class="nowrap">' + cell(r.teacher) + '</td><td>' + cell(r.level) + story +
+                       '</td><td class="nowrap">' + r.enrolled + ' / ' + r.capacity + '</td><td class="nowrap">' + places + '</td></tr>';
               }).join('');
+              var warns = (res.warnings || []);
+              var warnHtml = warns.length
+                ? '<div class="finding confirm" style="margin:0.5rem 0">⚠️ ' + warns.map(escapeHtml).join('<br>') + '</div>'
+                : '';
               out.innerHTML =
                 '<div style="margin:0.5rem 0">' +
                   '<a href="' + res.pdfUrl + '" target="_blank" rel="noopener">Open PDF (stable link)</a> · ' +
                   '<a href="' + res.docUrl + '" target="_blank" rel="noopener">Open Doc</a> · ' +
                   '<span class="muted">updated ' + escapeHtml(res.generatedAt) + '</span>' +
                 '</div>' +
-                '<div class="scrolllist"><table class="plantable"><thead><tr><th>Class</th><th>Day / Time</th><th>Teacher</th><th>Level</th><th>Enrolled</th><th>Places</th><th>Wks Left</th><th>Fee</th></tr></thead><tbody>' +
+                warnHtml +
+                '<div class="scrolllist"><table class="plantable"><thead><tr><th>Class</th><th>Day / Time</th><th>Teacher</th><th>Level</th><th>Enrolled</th><th>Places</th></tr></thead><tbody>' +
                   rows +
                 '</tbody></table></div>';
             })

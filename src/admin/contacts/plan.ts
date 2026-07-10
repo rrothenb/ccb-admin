@@ -18,6 +18,7 @@
 
 import { ReconContext } from '../detector';
 import { isEmailShaped, emailKey, nameKey } from '../detector/normalize';
+import { splitClassIds } from '../classid';
 
 /** The umbrella label every managed contact belongs to — the primary safety scope. */
 export const UMBRELLA_LABEL = 'CCB Members';
@@ -26,7 +27,12 @@ export const UMBRELLA_LABEL = 'CCB Members';
 // they read cleaner in Gmail's To: field ("Class 1" not "CCB Class 1").
 export const classLabel = (n: string): string => `Class ${n.trim()}`;
 export const teacherLabel = (t: string): string => `Teacher ${t.trim()}`;
-export const levelLabel = (l: string): string => `Level ${l.trim()}`;
+export const levelLabel = (l: string): string => `Level ${normalizeLevel(l)}`;
+
+/** Expands the org's level shorthand for the label — "U Intermediate" → "Upper Intermediate". */
+export function normalizeLevel(level: string): string {
+  return (level || '').trim().replace(/\bU\s+Intermediate\b/gi, 'Upper Intermediate');
+}
 
 /** Matches the labels this projection manages. Applied only to contacts already in the umbrella. */
 const MANAGED_LABEL_RE = /^(Class|Teacher|Level) .+/;
@@ -126,12 +132,12 @@ export function buildDesiredContacts(
   members: MemberForContact[],
   classInfo: Map<string, { teacher: string; level: string }>
 ): DesiredContact[] {
-  const normClass = (c: string) => c.toLowerCase().replace(/\s+/g, '');
   return members.map((m) => {
     const labels = new Set<string>([UMBRELLA_LABEL]);
-    for (const cls of m.classNumbers) {
+    // A class number can name multiple classes ("11 & 12" → labels for both).
+    for (const cls of m.classNumbers.flatMap(splitClassIds)) {
       labels.add(classLabel(cls));
-      const info = classInfo.get(normClass(cls));
+      const info = classInfo.get(cls);
       if (info && info.teacher) labels.add(teacherLabel(info.teacher));
       if (info && info.level) labels.add(levelLabel(info.level));
     }

@@ -89,6 +89,12 @@ describe('buildDesiredContacts', () => {
     const [d] = buildDesiredContacts([member({ classNumbers: ['99'] })], new Map());
     expect(d.labels).toEqual(['CCB Members', 'Class 99']);
   });
+
+  it('expands the "U Intermediate" shorthand to "Upper Intermediate" in the label', () => {
+    const info = new Map([['1', { teacher: 'Hannah', level: 'U Intermediate (B2+)' }]]);
+    const [d] = buildDesiredContacts([member()], info);
+    expect(d.labels).toContain('Level Upper Intermediate (B2+)');
+  });
 });
 
 describe('diffContacts', () => {

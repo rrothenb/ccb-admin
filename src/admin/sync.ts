@@ -23,8 +23,6 @@ import { uploadedXlsxToSheetId, trashSheet, sheetToStringGrid } from './ingest/x
 import { getBorrowerService } from '../services/borrowers';
 import { logAdmin } from './log';
 
-const RESOLVED_KEYS_PROPERTY = 'DETECTOR_RESOLVED_KEYS';
-
 /** What the client receives from a sync detection run. */
 export interface SyncDetectResult {
   success: boolean;
@@ -67,18 +65,6 @@ function loadAppMembers(): AppMember[] {
     email: b.email || '',
     expiryDate: b.expiryDate || '',
   }));
-}
-
-/** Reads the persisted set of finding keys the admin has already resolved. */
-function getResolvedKeys(): string[] {
-  const raw = PropertiesService.getScriptProperties().getProperty(RESOLVED_KEYS_PROPERTY);
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.map(String) : [];
-  } catch {
-    return [];
-  }
 }
 
 /**
@@ -125,7 +111,7 @@ function runMembershipSync(
     const input: DetectorInput = { master, register, app, roster: { validClassIds: classIds } };
     // Reconcile once and share the context with both the rules and the change plan.
     const ctx = reconcile(input);
-    const report = runDetector(input, { resolvedKeys: getResolvedKeys(), context: ctx });
+    const report = runDetector(input, { context: ctx });
 
     // Uniform expiry for the whole cohort — school-year start + 1yr, from the tab name.
     const computedExpiry = membershipExpiry(masterTab.getName());
@@ -159,23 +145,4 @@ function runMembershipSync(
   }
 }
 
-/** Marks a finding key resolved so it's suppressed on future runs (remember-every-resolution). */
-function resolveFinding(key: string): { success: boolean; error?: string } {
-  if (!key) return { success: false, error: 'No finding key given.' };
-  const keys = new Set(getResolvedKeys());
-  keys.add(key);
-  PropertiesService.getScriptProperties().setProperty(RESOLVED_KEYS_PROPERTY, JSON.stringify([...keys]));
-  logAdmin(`Resolved detector finding: ${key}`);
-  return { success: true };
-}
-
-/** Clears a resolved key (un-resolve), so the finding will surface again. */
-function unresolveFinding(key: string): { success: boolean; error?: string } {
-  const keys = new Set(getResolvedKeys());
-  keys.delete(key);
-  PropertiesService.getScriptProperties().setProperty(RESOLVED_KEYS_PROPERTY, JSON.stringify([...keys]));
-  logAdmin(`Un-resolved detector finding: ${key}`);
-  return { success: true };
-}
-
-export { runMembershipSync, resolveFinding, unresolveFinding };
+export { runMembershipSync };
