@@ -67,3 +67,10 @@ describe('buildSchedule — Story Time detection', () => {
     expect(warnings).toHaveLength(0);
   });
 });
+
+describe('buildSchedule — level display', () => {
+  it('expands "U Intermediate" to "Upper Intermediate"', () => {
+    const { rows } = buildSchedule([m('1')], [r('1', { level: 'U Intermediate (B2+)' })], CAP, NONE);
+    expect(rows[0].level).toBe('Upper Intermediate (B2+)');
+  });
+});

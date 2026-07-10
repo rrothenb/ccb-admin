@@ -20,6 +20,7 @@
 import { MasterRow, RegisterRow } from '../detector/types';
 import { splitClassIds } from '../classid';
 import { KIDS_LEVEL_RE } from '../ingest/register';
+import { normalizeLevel } from '../level';
 
 /** One row of the rendered schedule. */
 export interface ScheduleRow {
@@ -157,7 +158,9 @@ export function buildSchedule(
       id,
       dayTime: live.dayTime,
       teacher: live.teacher,
-      level: live.level,
+      // Display normalization ("U Intermediate" → "Upper Intermediate"); the raw
+      // level was already used above for the kids-level Story Time signal.
+      level: normalizeLevel(live.level),
       enrolled: live.enrolled,
       capacity,
       placesAvailable: Math.max(0, capacity - live.enrolled),

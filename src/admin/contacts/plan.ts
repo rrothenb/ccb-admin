@@ -19,6 +19,7 @@
 import { ReconContext } from '../detector';
 import { isEmailShaped, emailKey, nameKey } from '../detector/normalize';
 import { splitClassIds } from '../classid';
+import { normalizeLevel } from '../level';
 
 /** The umbrella label every managed contact belongs to — the primary safety scope. */
 export const UMBRELLA_LABEL = 'CCB Members';
@@ -28,11 +29,6 @@ export const UMBRELLA_LABEL = 'CCB Members';
 export const classLabel = (n: string): string => `Class ${n.trim()}`;
 export const teacherLabel = (t: string): string => `Teacher ${t.trim()}`;
 export const levelLabel = (l: string): string => `Level ${normalizeLevel(l)}`;
-
-/** Expands the org's level shorthand for the label — "U Intermediate" → "Upper Intermediate". */
-export function normalizeLevel(level: string): string {
-  return (level || '').trim().replace(/\bU\s+Intermediate\b/gi, 'Upper Intermediate');
-}
 
 /** Matches the labels this projection manages. Applied only to contacts already in the umbrella. */
 const MANAGED_LABEL_RE = /^(Class|Teacher|Level) .+/;
