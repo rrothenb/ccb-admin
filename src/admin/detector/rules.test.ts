@@ -53,9 +53,19 @@ describe('name-collision', () => {
 });
 
 describe('cross-presence', () => {
-  it('flags a Master member with no app record (confirm)', () => {
-    const f = run({ master: [master('New, Guy')], app: [] }).find((x) => x.code === 'master-not-in-app')!;
-    expect(f.tier).toBe('confirm');
+  it('rolls Master members not in the app but creatable (Register email) into ONE fyi', () => {
+    const findings = run({
+      master: [master('New, Guy')],
+      register: [reg('New, Guy', 'guy@ex.fr')],
+      app: [],
+    }).filter((f) => f.code === 'master-not-in-app');
+    expect(findings).toHaveLength(1);
+    expect(findings[0].tier).toBe('fyi');
+  });
+
+  it('BLOCKS Master members not in the app AND with no email anywhere', () => {
+    const f = run({ master: [master('New, Guy')], app: [] }).find((x) => x.code === 'master-no-email')!;
+    expect(f.tier).toBe('block');
   });
 
   it('rolls active-but-not-in-Master members into ONE fyi (not per person)', () => {
@@ -81,17 +91,19 @@ describe('cross-presence', () => {
 });
 
 describe('link quality', () => {
-  it('raises a confirm for a fuzzy name match', () => {
-    expect(codes({ master: [master('Martin, Louise')], app: [app('B1', 'Martin, Louisa')] }))
-      .toContain('fuzzy-name-match');
+  it('BLOCKS a fuzzy name match (names must be exact)', () => {
+    const f = run({ master: [master('Martin, Louise')], app: [app('B1', 'Martin, Louisa')] })
+      .find((x) => x.code === 'fuzzy-name-match')!;
+    expect(f.tier).toBe('block');
   });
 
-  it('raises a confirm for an email-bridge match', () => {
-    expect(codes({
+  it('raises a needs-review (not block) for an email-bridge match — the household mechanism', () => {
+    const f = run({
       master: [master('Coisne, Véronique')],
       register: [reg('Coisne, Véronique', 'xavier.sion@ex.fr')],
       app: [app('B1', 'Sion, François-Xavier', 'xavier.sion@ex.fr')],
-    })).toContain('email-bridge-match');
+    }).find((x) => x.code === 'email-bridge-match')!;
+    expect(f.tier).toBe('confirm');
   });
 });
 
@@ -167,14 +179,16 @@ describe('class checks', () => {
 });
 
 describe('email checks (current members only)', () => {
-  it('flags a current member with no email', () => {
-    expect(codes({ master: [master('Noemail, Nan')], app: [app('B1', 'Noemail, Nan', '')] }))
-      .toContain('missing-email');
+  it('BLOCKS a current member with no email', () => {
+    const f = run({ master: [master('Noemail, Nan')], app: [app('B1', 'Noemail, Nan', '')] })
+      .find((x) => x.code === 'missing-email')!;
+    expect(f.tier).toBe('block');
   });
 
-  it('flags a malformed email', () => {
-    expect(codes({ master: [master('Bad, Ben')], app: [app('B1', 'Bad, Ben', 'not-an-email')] }))
-      .toContain('malformed-email');
+  it('BLOCKS a malformed email', () => {
+    const f = run({ master: [master('Bad, Ben')], app: [app('B1', 'Bad, Ben', 'not-an-email')] })
+      .find((x) => x.code === 'malformed-email')!;
+    expect(f.tier).toBe('block');
   });
 
   it('flags two distinct current members sharing an email', () => {

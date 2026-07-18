@@ -33,13 +33,14 @@ describe('runDetector — gate + ordering', () => {
   it('orders block > confirm > fyi', () => {
     const r = runDetector(input({
       master: [
-        master('New, Guy'),                             // confirm (not in app)
+        master('Odd, Ollie', { classNumber: '99' }),    // confirm (nonexistent class)
         master('Owe, Sonia', { paid: false }),          // fyi (unpaid rollup)
       ],
       app: [
         app('B1', 'Dupe, Alex', 'a@ex.fr'),             // block: name collision...
         app('B2', 'Dupe, Alex', 'z@ex.fr'),             // ...with this one
         app('B3', 'Owe, Sonia'),
+        app('B4', 'Odd, Ollie', 'o@ex.fr'),
       ],
     }), { now: NOW });
     const tiers = r.findings.map((f) => f.tier);

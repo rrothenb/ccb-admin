@@ -19,7 +19,8 @@ export type Engine = 'rule' | 'fuzzy' | 'ai';
 /** Stable machine codes for each kind of finding (used for dedup + resolution memory). */
 export type FindingCode =
   | 'name-collision'          // same normalized name appears >1x within/across a source
-  | 'master-not-in-app'       // Master member with no App (Borrowers) record
+  | 'master-not-in-app'       // Master member with no App record, but creatable (a Register email exists)
+  | 'master-no-email'         // Master member with no App record AND no email anywhere — can't be created
   | 'app-active-not-in-master'// App member still active but absent from current-year Master
   | 'fuzzy-name-match'        // near-name candidate link Master↔App — human must confirm
   | 'email-bridge-match'      // linked via Register household email, not by name — confirm

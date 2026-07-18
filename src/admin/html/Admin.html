@@ -67,6 +67,26 @@
     </div>
 
     <div class="card">
+      <h2 style="font-size:1.1rem;margin-top:0">Update the Borrowers sheet</h2>
+      <p class="muted">
+        Writes this year's cohort back into the app's <strong>Borrowers</strong>
+        sheet: <strong>adds</strong> Master members who aren't in the app yet
+        (name + Register email + expiry) and <strong>updates the expiry</strong>
+        of members already there. It only ever writes names it's certain about —
+        an exact match to update, or a genuinely new name with an email to add.
+        Anything ambiguous (a near/fuzzy name, an email-only match, a duplicated
+        or emailless name) is <strong>never written and never silently skipped</strong>:
+        it's listed below for you to fix. Writes are <strong>all-or-nothing</strong> —
+        if anything is skipped, nothing is applied. Existing records keep every other
+        field; only the expiry changes, and nothing is ever deleted.
+      </p>
+      <button id="borPreviewBtn" onclick="runBorrowers(false)" disabled>Preview</button>
+      <button id="borApplyBtn" onclick="runBorrowers(true)" disabled style="background:#b06a00;border-color:#b06a00">Apply to Borrowers</button>
+      <div id="borGateNote" class="muted" style="margin-top:0.5rem">Run <strong>Membership sync — detect</strong> first — this unlocks once it reports no name ambiguities.</div>
+      <div id="borResult" class="result"></div>
+    </div>
+
+    <div class="card">
       <h2 style="font-size:1.1rem;margin-top:0">Gmail Contacts projection</h2>
       <p class="muted">
         Projects current members into this account's Contacts under the
@@ -76,8 +96,9 @@
         that umbrella are ever touched. Apply writes to Contacts (not the
         spreadsheets) and is guarded against oversized diffs.
       </p>
-      <button id="conPreviewBtn" onclick="runContacts(false)">Preview</button>
+      <button id="conPreviewBtn" onclick="runContacts(false)" disabled>Preview</button>
       <button id="conApplyBtn" onclick="runContacts(true)" disabled style="background:#b06a00;border-color:#b06a00">Apply to Contacts</button>
+      <div id="conGateNote" class="muted" style="margin-top:0.5rem">Run <strong>Membership sync — detect</strong> first — this unlocks once it reports no discrepancies.</div>
       <div id="conResult" class="result"></div>
     </div>
 
@@ -113,7 +134,7 @@
     <script>
       var TIER_META = {
         block:   { icon: '🛑', label: 'Blocking — must fix before syncing' },
-        confirm: { icon: '⚠️', label: 'Confirm' },
+        confirm: { icon: '⚠️', label: 'Needs review' },
         fyi:     { icon: 'ℹ️', label: 'For your information' }
       };
 
@@ -159,7 +180,7 @@
         var observer = new MutationObserver(function () {
           if (!document.querySelector('.result .spinner')) document.body.classList.remove('busy');
         });
-        ['syncResult', 'conResult', 'schedResult', 'result'].forEach(function (id) {
+        ['syncResult', 'borResult', 'conResult', 'schedResult', 'result'].forEach(function (id) {
           var el = document.getElementById(id);
           if (el) observer.observe(el, { childList: true, subtree: true });
         });
@@ -189,11 +210,11 @@
           : '';
         return '<div class="card" style="background:#f5f8ff">' +
           '<h3 style="margin:0 0 0.5rem;font-size:1rem">Planned changes to app members</h3>' +
-          '<p class="muted" style="margin-top:0">Preview only — <strong>nothing is written</strong>. When the write phase is built, applying this sync would:</p>' +
+          '<p class="muted" style="margin-top:0">A quick estimate — <strong>nothing is written here</strong>. The <strong>Update the Borrowers sheet</strong> tool below is what actually writes (and only on exact name matches). Roughly:</p>' +
           '<ul>' +
-            '<li><strong>' + plan.toUpdate.length + '</strong> current member(s) would have their expiry set to <strong>' + escapeHtml(target) + '</strong>.</li>' +
+            '<li>up to <strong>' + plan.toUpdate.length + '</strong> current member(s) would have their expiry set to <strong>' + escapeHtml(target) + '</strong>.</li>' +
             '<li>' + plan.alreadyCurrentCount + ' already at that date — no change.</li>' +
-            '<li>' + plan.cannotWriteYet.length + ' Master member(s) can\'t be updated until added to the app.</li>' +
+            '<li>' + plan.cannotWriteYet.length + ' Master member(s) aren\'t in the app yet — the Borrowers tool below can add those that have a Register email.</li>' +
           '</ul>' +
           unconfirmed +
           '<p class="muted">Only these ' + plan.currentMemberCount + ' matched current members are ever touched — the other app records are left alone.</p>' +
@@ -224,7 +245,7 @@
             ' · Master tab "' + escapeHtml(stats.masterTab) + '" (header row ' + stats.masterHeaderRow + ')' +
           '</div>' +
           '<div class="muted">Every synced member will get expiry <strong>' + escapeHtml(stats.computedExpiry) + '</strong> (school-year start + 1 year).</div>' +
-          '<div class="muted">' + c.block + ' blocking · ' + c.confirm + ' to confirm · ' + c.fyi + ' fyi</div>';
+          '<div class="muted">' + c.block + ' blocking · ' + c.confirm + ' to review · ' + c.fyi + ' fyi</div>';
 
         var html = summary + gate + renderPlan(plan);
         ['block', 'confirm', 'fyi'].forEach(function (tier) {
@@ -258,6 +279,8 @@
                 return;
               }
               renderReport(res);
+              updateBorrowerGate(res.report);
+              updateContactsGate(res.report);
             })
             .withFailureHandler(function (err) {
               btn.disabled = false;
@@ -266,6 +289,190 @@
             .runMembershipSync(master.b64, master.name, register.b64, register.name);
         }).catch(function (err) {
           btn.disabled = false;
+          out.innerHTML = '<span class="error">Error: ' + escapeHtml(err.message) + '</span>';
+        });
+      }
+
+      var SKIP_LABEL = {
+        'ambiguous-match': 'Uncertain match',
+        'name-collision': 'Duplicated name',
+        'no-email': 'No email to add with',
+        'shared-email': 'Shared email',
+        'email-in-app': 'Email already in app'
+      };
+
+      function renderBorrowerPlan(res) {
+        var out = document.getElementById('borResult');
+        var plan = res.plan, stats = res.stats;
+        var target = humanDate(plan.targetExpiryISO);
+
+        var section = function (title, color, arr, headCols, rowFn) {
+          if (!arr.length) return '';
+          var head = '<div class="tierhead"' + (color ? ' style="color:' + color + '"' : '') + '>' + title + ' (' + arr.length + ')</div>';
+          var ths = headCols.map(function (h) { return '<th>' + h + '</th>'; }).join('');
+          return head + '<div class="scrolllist"><table class="plantable"><thead><tr>' + ths + '</tr></thead><tbody>' +
+            arr.map(rowFn).join('') + '</tbody></table></div>';
+        };
+
+        var applied = stats && stats.applied
+          ? '<div class="gate ' + (stats.applied.failed ? 'blocked' : 'ok') + '">' +
+              (stats.applied.failed ? '⚠️' : '✓') + ' Applied: ' + stats.applied.added + ' added · ' +
+              stats.applied.updated + ' expiry-updated' + (stats.applied.failed ? ' · ' + stats.applied.failed + ' failed' : '') + '.</div>'
+          : '';
+        var failRows = (stats && stats.failures && stats.failures.length)
+          ? section('Failed to write', '#b00020', stats.failures, ['Name', 'Error'], function (f) {
+              return '<tr><td class="nowrap">' + escapeHtml(f.name) + '</td><td>' + escapeHtml(f.error) + '</td></tr>';
+            })
+          : '';
+        // If anything is skipped (and we haven't already applied), Apply is blocked:
+        // writes are all-or-nothing.
+        var partialBlock = (plan.skipped.length && !(stats && stats.applied))
+          ? '<div class="gate blocked">🛑 ' + plan.skipped.length + ' item(s) below are unresolved — nothing can be written until they\'re fixed (writes are all-or-nothing). Fix them in the spreadsheets/app and re-run detection.</div>'
+          : '';
+
+        out.innerHTML = applied + partialBlock +
+          '<div class="muted">' + stats.masterMembers + ' Master · ' + stats.appMembers + ' app members · ' +
+            'Master tab "' + escapeHtml(stats.masterTab) + '" · every written member gets expiry <strong>' + escapeHtml(target) + '</strong>.</div>' +
+          '<div class="muted">' + plan.alreadyCurrentCount + ' already at that expiry — no change.</div>' +
+          failRows +
+          section('Add — new Borrowers', '', plan.toAdd, ['Name', 'Email', 'Expiry'], function (a) {
+            return '<tr><td class="nowrap">' + escapeHtml(a.name) + '</td><td class="nowrap">' + escapeHtml(a.email) +
+              '</td><td class="nowrap">' + escapeHtml(humanDate(a.expiryISO)) + '</td></tr>';
+          }) +
+          section('Update expiry', '', plan.toUpdate, ['Member', 'Current expiry', 'Would become'], function (u) {
+            return '<tr><td class="nowrap">' + escapeHtml(u.name) + '</td><td class="nowrap">' + escapeHtml(u.fromRaw) +
+              '</td><td class="nowrap">&rarr; ' + escapeHtml(humanDate(u.toISO)) + '</td></tr>';
+          }) +
+          section('Skipped — not written (fix these, then re-run)', '#b06a00', plan.skipped, ['Name', 'Why', 'Detail'], function (s) {
+            return '<tr><td class="nowrap">' + escapeHtml(s.name) + '</td><td class="nowrap">' +
+              escapeHtml(SKIP_LABEL[s.reason] || s.reason) + '</td><td>' + escapeHtml(s.detail) + '</td></tr>';
+          }) +
+          (!plan.toAdd.length && !plan.toUpdate.length && !plan.skipped.length
+            ? '<p class="muted">Borrowers already match — nothing to add or update.</p>' : '');
+      }
+
+      // The Borrowers tool stays locked until a detection run comes back with no
+      // NAME ambiguities (fuzzy/near names, email-only matches, duplicate names) —
+      // those are exactly what would make a write unsafe.
+      var AMBIGUITY_CODES = { 'name-collision': 1, 'fuzzy-name-match': 1, 'email-bridge-match': 1 };
+      var borPreviewAllowed = false;
+      var borApplyArmed = false;
+
+      function resetBorrowerGate(msg) {
+        borPreviewAllowed = false;
+        borApplyArmed = false;
+        document.getElementById('borPreviewBtn').disabled = true;
+        var applyBtn = document.getElementById('borApplyBtn');
+        applyBtn.disabled = true;
+        applyBtn.textContent = 'Apply to Borrowers';
+        var note = document.getElementById('borGateNote');
+        if (note) note.innerHTML = msg || 'Run <strong>Membership sync — detect</strong> first — this unlocks once it reports no name ambiguities.';
+      }
+
+      // Called after a successful detection run: unlock Preview iff the report is
+      // free of name ambiguities. A fresh detection always re-locks Apply.
+      function updateBorrowerGate(report) {
+        var hasAmbiguity = report.findings.some(function (f) { return AMBIGUITY_CODES[f.code]; });
+        if (hasAmbiguity) {
+          resetBorrowerGate('Resolve the name ambiguities above (fuzzy / email-only matches, duplicate names), then re-run detection to unlock the Borrowers tool.');
+          return;
+        }
+        borPreviewAllowed = true;
+        borApplyArmed = false;
+        document.getElementById('borPreviewBtn').disabled = false;
+        var applyBtn = document.getElementById('borApplyBtn');
+        applyBtn.disabled = true;
+        applyBtn.textContent = 'Apply to Borrowers';
+        var note = document.getElementById('borGateNote');
+        if (note) note.innerHTML = 'Detection found no name ambiguities — <strong>Preview</strong> the Borrowers writes.';
+      }
+
+      // The Contacts projection stays locked until detection comes back with no
+      // DISCREPANCIES — any 🛑 blocking or ⚠️ needs-review finding. Unlike the
+      // Borrowers write, class/teacher/level and email findings matter here too:
+      // they become the contact's labels and address.
+      var conPreviewAllowed = false;
+
+      function resetContactsGate(msg) {
+        conPreviewAllowed = false;
+        conApplyArmed = false;
+        document.getElementById('conPreviewBtn').disabled = true;
+        var applyBtn = document.getElementById('conApplyBtn');
+        applyBtn.disabled = true;
+        applyBtn.textContent = 'Apply to Contacts';
+        var note = document.getElementById('conGateNote');
+        if (note) note.innerHTML = msg || 'Run <strong>Membership sync — detect</strong> first — this unlocks once it reports no discrepancies.';
+      }
+
+      function updateContactsGate(report) {
+        var hasDiscrepancy = report.counts.block > 0 || report.counts.confirm > 0;
+        if (hasDiscrepancy) {
+          resetContactsGate('Resolve the 🛑 blocking and ⚠️ needs-review items above, then re-run detection to unlock the Contacts projection.');
+          return;
+        }
+        conPreviewAllowed = true;
+        conApplyArmed = false;
+        document.getElementById('conPreviewBtn').disabled = false;
+        var applyBtn = document.getElementById('conApplyBtn');
+        applyBtn.disabled = true;
+        applyBtn.textContent = 'Apply to Contacts';
+        var note = document.getElementById('conGateNote');
+        if (note) note.innerHTML = 'Detection found no discrepancies — <strong>Preview</strong> the projection.';
+      }
+
+      // Changing either uploaded file invalidates the last detection, so re-lock.
+      ['masterFile', 'registerFile'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('change', function () { resetBorrowerGate(); resetContactsGate(); });
+      });
+
+      function runBorrowers(apply) {
+        if (!apply && !borPreviewAllowed) return; // guarded by the disabled button too
+        var previewBtn = document.getElementById('borPreviewBtn');
+        var applyBtn = document.getElementById('borApplyBtn');
+        var out = document.getElementById('borResult');
+
+        // Two-click confirm for apply (no native dialog): first click arms, second applies.
+        if (apply && !borApplyArmed) {
+          borApplyArmed = true;
+          applyBtn.textContent = 'Click again to confirm — writes to Borrowers';
+          return;
+        }
+        borApplyArmed = false;
+        applyBtn.textContent = 'Apply to Borrowers';
+
+        previewBtn.disabled = true;
+        applyBtn.disabled = true;
+        out.innerHTML = busy('Reading files…');
+        readSpreadsheets().then(function (f) {
+          if (!f) {
+            previewBtn.disabled = false;
+            out.innerHTML = '<span class="error">Pick the Master and Register files at the top of the page first.</span>';
+            return;
+          }
+          var master = f.master, register = f.register;
+          out.innerHTML = busy(apply ? 'Writing to Borrowers…' : 'Building Borrowers write preview…');
+          google.script.run
+            .withSuccessHandler(function (res) {
+              previewBtn.disabled = false;
+              if (!res || !res.success) {
+                out.innerHTML = '<span class="error">Failed: ' + escapeHtml((res && res.error) || 'unknown error') + '</span>';
+                return;
+              }
+              renderBorrowerPlan(res);
+              // Enable Apply only after a successful preview that has something to
+              // write AND nothing skipped — writes are all-or-nothing.
+              var hasWrites = res.plan.toAdd.length || res.plan.toUpdate.length;
+              var hasSkips = res.plan.skipped.length > 0;
+              applyBtn.disabled = apply || !hasWrites || hasSkips;
+            })
+            .withFailureHandler(function (err) {
+              previewBtn.disabled = false;
+              out.innerHTML = '<span class="error">Error: ' + escapeHtml(err.message) + '</span>';
+            })
+          [apply ? 'applyBorrowerWrites' : 'previewBorrowerWrites'](master.b64, master.name, register.b64, register.name);
+        }).catch(function (err) {
+          previewBtn.disabled = false;
           out.innerHTML = '<span class="error">Error: ' + escapeHtml(err.message) + '</span>';
         });
       }
@@ -306,6 +513,7 @@
       }
 
       function runContacts(apply) {
+        if (!apply && !conPreviewAllowed) return; // guarded by the disabled button too
         var previewBtn = document.getElementById('conPreviewBtn');
         var applyBtn = document.getElementById('conApplyBtn');
         var out = document.getElementById('conResult');

@@ -105,20 +105,41 @@ function nameCollisions(ctx: ReconContext): Finding[] {
 function crossPresence(ctx: ReconContext, now: Date): Finding[] {
   const out: Finding[] = [];
 
-  // Master member with no app record at all → admin adds by hand (email entered then).
+  // Master members with no app record. This is NOT a discrepancy in itself — it's
+  // exactly what the "Update the Borrowers sheet" and Contacts tools exist to
+  // create. Split by whether we have an email to create them WITH:
+  //   - a Register email is available → ℹ️ fyi (the tools can add them);
+  //   - no email anywhere            → 🛑 block (they can't be created at all).
+  const creatable: string[] = [];
+  const uncreatable: string[] = [];
   for (const link of ctx.links) {
-    if (link.kind === 'none') {
-      out.push(
-        make(
-          'master-not-in-app',
-          'confirm',
-          'rule',
-          `"${link.master.rawName}" is in the Master but has no app member record. Add them via the app's "add member" screen (enter their email there), or correct the name.`,
-          [link.master.rawName],
-          `Master row ${link.master.rowNumber}`
-        )
-      );
-    }
+    if (link.kind !== 'none') continue;
+    const email = ctx.registerEmailByNameKey.get(nameKey(link.master.rawName)) || '';
+    (isEmailShaped(email) ? creatable : uncreatable).push(link.master.rawName);
+  }
+  if (creatable.length > 0) {
+    const names = creatable.sort();
+    out.push(
+      make(
+        'master-not-in-app',
+        'fyi',
+        'rule',
+        `${names.length} Master member(s) aren't in the app yet — the "Update the Borrowers sheet" and Contacts tools can add them (a Register email was found for each): ${names.join(', ')}.`,
+        names
+      )
+    );
+  }
+  if (uncreatable.length > 0) {
+    const names = uncreatable.sort();
+    out.push(
+      make(
+        'master-no-email',
+        'block',
+        'rule',
+        `${names.length} Master member(s) aren't in the app and have no email anywhere (none in the app, none in the Register), so they can't be created. Add them by hand with an email, or put their email in the Register, then re-run: ${names.join(', ')}.`,
+        names
+      )
+    );
   }
 
   // App members still active but absent from this year's Master. This is the
@@ -150,9 +171,9 @@ function linkQuality(ctx: ReconContext): Finding[] {
       out.push(
         make(
           'fuzzy-name-match',
-          'confirm',
+          'block',
           'fuzzy',
-          `Master "${link.master.rawName}" looks like app member "${link.app.rawName}" (edit distance ${link.distance}), but the names aren't identical. Confirm they're the same person before syncing — do not assume (e.g. Louise ≠ Louisa).`,
+          `Master "${link.master.rawName}" looks like app member "${link.app.rawName}" (edit distance ${link.distance}), but the names aren't identical. Names must match exactly to sync — fix the name in the app or the Master so they agree (do not assume Louise = Louisa).`,
           [link.master.rawName, link.app.rawName],
           `Master row ${link.master.rowNumber}`
         )
@@ -283,9 +304,9 @@ function emailChecks(ctx: ReconContext): Finding[] {
       out.push(
         make(
           'missing-email',
-          'confirm',
+          'block',
           'rule',
-          `Current member "${a.rawName}" has no email in the app, so they can't be added to Gmail Contacts or emailed. Add one.`,
+          `Current member "${a.rawName}" has no email in the app, so they can't be added to Gmail Contacts or emailed. Add one before syncing.`,
           [a.rawName]
         )
       );
@@ -295,9 +316,9 @@ function emailChecks(ctx: ReconContext): Finding[] {
       out.push(
         make(
           'malformed-email',
-          'confirm',
+          'block',
           'rule',
-          `Current member "${a.rawName}" has a malformed email ("${a.email}"). Fix it in the app.`,
+          `Current member "${a.rawName}" has a malformed email ("${a.email}"). Fix it in the app before syncing.`,
           [a.rawName]
         )
       );

@@ -32,6 +32,8 @@ import { generateSchedule } from './admin/schedule/generate';
 
 import { previewContactProjection, applyContactProjection } from './admin/contacts/project';
 
+import { previewBorrowerWrites, applyBorrowerWrites } from './admin/borrower-sync';
+
 import {
   contactsSpike_listManaged,
   contactsSpike_syncDryRun,
@@ -124,6 +126,10 @@ function clearConfig(): void {
 // Gmail Contacts projection
 (globalThis as Record<string, unknown>).previewContactProjection = previewContactProjection;
 (globalThis as Record<string, unknown>).applyContactProjection = applyContactProjection;
+
+// Borrowers write-back (add missing members + update expiries)
+(globalThis as Record<string, unknown>).previewBorrowerWrites = previewBorrowerWrites;
+(globalThis as Record<string, unknown>).applyBorrowerWrites = applyBorrowerWrites;
 
 // Contacts spike (People API risk retirement)
 (globalThis as Record<string, unknown>).contactsSpike_listManaged = contactsSpike_listManaged;
