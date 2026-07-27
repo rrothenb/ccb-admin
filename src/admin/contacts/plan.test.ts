@@ -18,8 +18,8 @@ function m(rawName: string, over: Partial<MasterRow> = {}): MasterRow {
 function reg(rawName: string, email: string, over: Partial<RegisterRow> = {}): RegisterRow {
   return { rawName, email, classId: '1', teacher: 'Sue', level: 'B1', ...over };
 }
-function app(id: string, rawName: string, email: string): AppMember {
-  return { id, rawName, email, expiryDate: '' };
+function app(id: string, rawName: string, email: string, phone = ''): AppMember {
+  return { id, rawName, email, phone, expiryDate: '' };
 }
 function input(over: Partial<DetectorInput>): DetectorInput {
   return { master: [], register: [], app: [], roster: { validClassIds: [] }, ...over };
@@ -28,7 +28,7 @@ function member(over: Partial<MemberForContact> = {}): MemberForContact {
   return { appId: 'B1', name: 'Dupont, Marie', email: 'marie@ex.fr', classNumbers: ['1'], ...over };
 }
 function existing(email: string, over: Partial<ExistingContact> = {}): ExistingContact {
-  return { email, resourceName: 'people/c1', etag: 'e', displayName: 'Dupont, Marie', labels: [UMBRELLA_LABEL, 'Class 1'], ...over };
+  return { email, phone: '', resourceName: 'people/c1', etag: 'e', displayName: 'Dupont, Marie', labels: [UMBRELLA_LABEL, 'Class 1'], ...over };
 }
 
 describe('isManagedLabel', () => {
@@ -68,12 +68,23 @@ describe('membersForContact', () => {
     expect(members[0].classNumbers.sort()).toEqual(['8a', '8b']);
   });
 
-  it('drops members with no usable email (can\'t be a contact)', () => {
+  it('drops members with no usable email OR phone (can\'t be a contact)', () => {
     const ctx = reconcile(input({
       master: [m('Noemail, Nan')],
       app: [app('B1', 'Noemail, Nan', '')],
     }));
     expect(membersForContact(ctx)).toHaveLength(0);
+  });
+
+  it('keeps a phone-only member (contactable by phone)', () => {
+    const ctx = reconcile(input({
+      master: [m('Phone, Only')],
+      app: [app('B1', 'Phone, Only', '', '06 48 41 34 70')],
+    }));
+    const members = membersForContact(ctx);
+    expect(members).toHaveLength(1);
+    expect(members[0].email).toBe('');
+    expect(members[0].phone).toBe('06 48 41 34 70');
   });
 });
 
@@ -99,18 +110,36 @@ describe('buildDesiredContacts', () => {
 
 describe('diffContacts', () => {
   const desired = (over: Partial<DesiredContact> = {}): DesiredContact => ({
-    email: 'marie@ex.fr', family: 'Dupont', given: 'Marie', labels: [UMBRELLA_LABEL, 'Class 1'], ...over,
+    email: 'marie@ex.fr', phone: '', family: 'Dupont', given: 'Marie', labels: [UMBRELLA_LABEL, 'Class 1'], ...over,
   });
 
   it('creates a member not yet in Contacts', () => {
     const plan = diffContacts([desired()], []);
     expect(plan.toCreate).toHaveLength(1);
     expect(plan.toCreate[0].email).toBe('marie@ex.fr');
+    expect(plan.toCreate[0].contact).toBe('marie@ex.fr');
+  });
+
+  it('creates a phone-only member with the phone in the phone field, keyed by phone', () => {
+    const plan = diffContacts([desired({ email: '', phone: '06 48 41 34 70' })], []);
+    expect(plan.toCreate).toHaveLength(1);
+    expect(plan.toCreate[0].email).toBe('');
+    expect(plan.toCreate[0].phone).toBe('06 48 41 34 70');
+    expect(plan.toCreate[0].contact).toBe('06 48 41 34 70');
+  });
+
+  it('matches a phone-only member to their existing contact (no duplicate) despite formatting', () => {
+    const plan = diffContacts(
+      [desired({ email: '', phone: '06 48 41 34 70' })],
+      [existing('', { phone: '+33 6 48 41 34 70' })]
+    );
+    expect(plan.toCreate).toHaveLength(0);
+    expect(plan.unchangedCount).toBe(1);
   });
 
   it('removes a managed contact who is no longer a member', () => {
     const plan = diffContacts([], [existing('gone@ex.fr')]);
-    expect(plan.toRemove.map((r) => r.email)).toEqual(['gone@ex.fr']);
+    expect(plan.toRemove.map((r) => r.contact)).toEqual(['gone@ex.fr']);
   });
 
   it('leaves an identical contact unchanged', () => {

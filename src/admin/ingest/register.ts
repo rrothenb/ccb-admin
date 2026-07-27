@@ -19,6 +19,7 @@
  */
 
 import { RegisterRow } from '../detector/types';
+import { isPhoneShaped } from '../detector/normalize';
 
 /** An email anywhere in a cell (permissive — the grid has stray punctuation). */
 const EMAIL_RE = /[^\s,;<>()]+@[^\s,;<>()]+\.[^\s,;<>()]+/;
@@ -129,12 +130,15 @@ function looksLikeName(cell: string): boolean {
   // Annotation/comment cells that mention a class ("From Class 4") aren't people.
   if (/\bclass\b/i.test(s)) return false;
   if (!/[a-zA-Z]{2,}/.test(s)) return false; // needs a real word, not "X"/"1"/a date
-  // A "Surname, First" has a comma; a "First Last" has a space between two words.
-  return /,/.test(s) || /[a-zA-Z]{2,}\s+[a-zA-Z]/.test(s);
+  // A "Surname, First" has a comma; a "First Last" has a space between two words;
+  // this Register also writes "SURNAME / Given" (slash between surname and given,
+  // e.g. "DELCOURT / Syma") — recognize that too, or the whole row (email included)
+  // would be dropped.
+  return /,/.test(s) || /[a-zA-Z]{2,}\s+[a-zA-Z]/.test(s) || /[a-zA-Z]{2,}\s*\/\s*[a-zA-Z]/.test(s);
 }
 
-/** Pulls the (name, email) out of a data row, or null if there's no usable name. */
-function extractPerson(row: string[]): { name: string; email: string } | null {
+/** Pulls the (name, email, phone) out of a data row, or null if there's no usable name. */
+function extractPerson(row: string[]): { name: string; email: string; phone: string } | null {
   let email = '';
   let emailIdx = -1;
   for (let i = 0; i < row.length; i++) {
@@ -146,9 +150,21 @@ function extractPerson(row: string[]): { name: string; email: string } | null {
     }
   }
 
-  let name = '';
+  // Some members have no email and give a phone in the same contact cell instead.
+  let phone = '';
+  let phoneIdx = -1;
   for (let i = 0; i < row.length; i++) {
     if (i === emailIdx) continue;
+    if (isPhoneShaped(row[i])) {
+      phone = row[i].trim();
+      phoneIdx = i;
+      break;
+    }
+  }
+
+  let name = '';
+  for (let i = 0; i < row.length; i++) {
+    if (i === emailIdx || i === phoneIdx) continue;
     if (looksLikeName(row[i])) {
       name = row[i].trim();
       break;
@@ -156,7 +172,7 @@ function extractPerson(row: string[]): { name: string; email: string } | null {
   }
 
   if (!name) return null;
-  return { name, email };
+  return { name, email, phone };
 }
 
 /**
@@ -184,6 +200,7 @@ export function parseRegisterGrid(grid: string[][]): RegisterRow[] {
     out.push({
       rawName: person.name,
       email: person.email,
+      phone: person.phone,
       classId: ctx.classId,
       teacher: ctx.teacher,
       level: ctx.level,

@@ -59,6 +59,26 @@ describe('parseRegisterGrid — combined siblings', () => {
     expect(rows[0].rawName).toBe('CELARIER FRAUDET, Alban / Maxence');
     expect(rows[0].email).toBe('household@ex.fr');
   });
+
+  it('recognizes a "SURNAME / Given" row (slash, no comma) so its email survives', () => {
+    const grid = [
+      ['Class 4 / Ola'],
+      ['DELCOURT / Syma', 'eng.3ola@ex.fr'],
+    ];
+    const rows = parseRegisterGrid(grid);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ rawName: 'DELCOURT / Syma', email: 'eng.3ola@ex.fr' });
+  });
+
+  it('captures a phone from the contact cell when there is no email', () => {
+    const grid = [
+      ['Class 3 / Amine'],
+      ['AFASSE Amine', 'P', '06 48 41 34 70'],
+    ];
+    const rows = parseRegisterGrid(grid);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ rawName: 'AFASSE Amine', email: '', phone: '06 48 41 34 70' });
+  });
 });
 
 describe('parseRegisterGrid — robustness', () => {

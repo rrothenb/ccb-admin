@@ -1,6 +1,9 @@
 import {
   stripAccents,
   nameKey,
+  coreName,
+  coreNameKey,
+  householdKey,
   tightKey,
   levenshtein,
   isEmailShaped,
@@ -27,6 +30,42 @@ describe('nameKey', () => {
   it('treats distinct people as distinct keys', () => {
     expect(nameKey('Louise Martin')).not.toBe(nameKey('Louisa Martin'));
     expect(nameKey('Frances Day')).not.toBe(nameKey('Francis Day'));
+  });
+});
+
+describe('coreName / coreNameKey', () => {
+  it('strips parentheticals, dependent clauses, and age markers', () => {
+    expect(coreName('CARSTEA, Mickaël (Mother Elena)')).toBe('CARSTEA, Mickaël');
+    expect(coreName('DELCOURT, Syma - mother Ola Alhaj Hasan')).toBe('DELCOURT, Syma');
+    expect(coreName('DUSAUSOY, Zélie 5 ans')).toBe('DUSAUSOY, Zélie');
+    expect(coreName('DUSAUSOY Zelie (4Yrs) (2nd group)')).toBe('DUSAUSOY Zelie');
+  });
+
+  it('keeps a real compound given name that only looks like an annotation', () => {
+    // The "- Bernard-Philippe" is the given name, not a "- mother …" clause.
+    expect(coreName('CORDONNIER - Bernard-Philippe')).toBe('CORDONNIER - Bernard-Philippe');
+  });
+
+  it('lets an annotated Master name and a clean Register name share a key', () => {
+    expect(coreNameKey('DUSAUSOY, Zélie 5 ans')).toBe(coreNameKey('DUSAUSOY Zelie (4Yrs)'));
+    expect(coreNameKey('DELCOURT, Syma - mother Ola')).toBe('delcourt syma');
+    expect(nameKey('DELCOURT / Syma')).toBe('delcourt syma');
+  });
+});
+
+describe('householdKey', () => {
+  it('buckets a Master "Surname, Given" and a Register "SURNAME Given" together', () => {
+    expect(householdKey('CORDONNIER - Bernard-Philippe')).toBe(householdKey('CORDONNIER Philippe'));
+    expect(householdKey('LEPRETRE-SAÏLE, Marie-Pierre')).toBe(householdKey('LEPRETRE Marie-Pierre'));
+    expect(householdKey('GRIMONT-PARISOT, June')).toBe(householdKey('GRIMONT-PARISOT, Jade'));
+  });
+
+  it('skips a leading single-letter initial', () => {
+    expect(householdKey('CALLENS, M-Christine')).toBe('callens');
+  });
+
+  it('is empty for a nameless cell', () => {
+    expect(householdKey('  ,  ')).toBe('');
   });
 });
 

@@ -241,7 +241,7 @@
         var summary =
           '<div class="muted">' +
             stats.masterMembers + ' Master · ' + stats.registerStudents + ' Register · ' +
-            stats.appMembers + ' app members · classes: ' + (stats.classIds.join(', ') || '—') +
+            stats.appMembers + ' app members · ' + (stats.contacts || 0) + ' contacts · classes: ' + (stats.classIds.join(', ') || '—') +
             ' · Master tab "' + escapeHtml(stats.masterTab) + '" (header row ' + stats.masterHeaderRow + ')' +
           '</div>' +
           '<div class="muted">Every synced member will get expiry <strong>' + escapeHtml(stats.computedExpiry) + '</strong> (school-year start + 1 year).</div>' +
@@ -495,19 +495,19 @@
           : '';
         out.innerHTML = applied +
           '<div class="muted">' + stats.desired + ' current members · ' + stats.existingManaged + ' already in the CCB Members label · ' + plan.unchangedCount + ' unchanged.</div>' +
-          section('Create', '', plan.toCreate, ['Name', 'Email', 'Labels'], function (c) {
+          section('Create', '', plan.toCreate, ['Name', 'Email / phone', 'Labels'], function (c) {
             return '<tr><td class="nowrap">' + escapeHtml(c.family + ', ' + c.given) + '</td><td class="nowrap">' +
-              escapeHtml(c.email) + '</td><td class="labels">' + escapeHtml(c.labels.join(', ')) + '</td></tr>';
+              escapeHtml(c.contact) + '</td><td class="labels">' + escapeHtml(c.labels.join(', ')) + '</td></tr>';
           }) +
-          section('Update', '', plan.toUpdate, ['Email', 'Change'], function (u) {
+          section('Update', '', plan.toUpdate, ['Email / phone', 'Change'], function (u) {
             var bits = [];
             if (u.nameChanged) bits.push('name→' + escapeHtml(u.toFamily + ', ' + u.toGiven));
             if (u.labelsToAdd.length) bits.push('+[' + escapeHtml(u.labelsToAdd.join(', ')) + ']');
             if (u.labelsToRemove.length) bits.push('−[' + escapeHtml(u.labelsToRemove.join(', ')) + ']');
-            return '<tr><td class="nowrap">' + escapeHtml(u.email) + '</td><td class="labels">' + bits.join(' ') + '</td></tr>';
+            return '<tr><td class="nowrap">' + escapeHtml(u.contact) + '</td><td class="labels">' + bits.join(' ') + '</td></tr>';
           }) +
-          section('Remove — deletes the contact', '#b00020', plan.toRemove, ['Name', 'Email'], function (r) {
-            return '<tr><td class="nowrap">' + escapeHtml(r.displayName) + '</td><td class="nowrap">' + escapeHtml(r.email) + '</td></tr>';
+          section('Remove — deletes the contact', '#b00020', plan.toRemove, ['Name', 'Email / phone'], function (r) {
+            return '<tr><td class="nowrap">' + escapeHtml(r.displayName) + '</td><td class="nowrap">' + escapeHtml(r.contact) + '</td></tr>';
           }) +
           (!plan.toCreate.length && !plan.toUpdate.length && !plan.toRemove.length ? '<p class="muted">Contacts already match — nothing to do.</p>' : '');
       }

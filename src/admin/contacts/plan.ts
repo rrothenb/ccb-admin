@@ -17,9 +17,21 @@
  */
 
 import { ReconContext } from '../detector';
-import { isEmailShaped, emailKey, nameKey } from '../detector/normalize';
+import { isEmailShaped, emailKey, isPhoneShaped, phoneKey, nameKey } from '../detector/normalize';
 import { splitClassIds } from '../classid';
 import { normalizeLevel } from '../level';
+
+/**
+ * Stable identity for the contact diff. A member's email is the join key when
+ * they have one; a phone-only member is keyed by their (normalized) phone so they
+ * project as a real contact instead of being dropped. Prefixed so an email and a
+ * phone can never collide.
+ */
+export function contactId(email: string, phone: string): string {
+  if (isEmailShaped(email)) return 'e:' + emailKey(email);
+  if (phone && isPhoneShaped(phone)) return 'p:' + phoneKey(phone);
+  return '';
+}
 
 /** The umbrella label every managed contact belongs to — the primary safety scope. */
 export const UMBRELLA_LABEL = 'CCB Members';
@@ -41,6 +53,8 @@ export interface MemberForContact {
   appId: string;
   name: string;
   email: string;
+  /** Phone, used as the contact detail when the member has no email ('' if none). */
+  phone?: string;
   /** Every class number this app record is enrolled in (siblings can span classes). */
   classNumbers: string[];
 }
@@ -48,6 +62,8 @@ export interface MemberForContact {
 /** The desired end-state for one contact. */
 export interface DesiredContact {
   email: string;
+  /** Set only for a phone-only member — written to the Contacts phone field. */
+  phone: string;
   family: string;
   given: string;
   labels: string[];
@@ -56,6 +72,7 @@ export interface DesiredContact {
 /** A contact currently in the managed umbrella (read from Contacts). */
 export interface ExistingContact {
   email: string;
+  phone: string;
   resourceName: string;
   etag: string;
   displayName: string;
@@ -64,13 +81,16 @@ export interface ExistingContact {
 }
 
 export interface ContactCreate {
+  /** The email or phone shown to the admin (whichever this contact is keyed by). */
+  contact: string;
   email: string;
+  phone: string;
   family: string;
   given: string;
   labels: string[];
 }
 export interface ContactUpdate {
-  email: string;
+  contact: string;
   resourceName: string;
   etag: string;
   fromName: string;
@@ -81,7 +101,7 @@ export interface ContactUpdate {
   labelsToRemove: string[];
 }
 export interface ContactRemove {
-  email: string;
+  contact: string;
   resourceName: string;
   displayName: string;
 }
@@ -109,18 +129,22 @@ export function splitName(raw: string): { family: string; given: string } {
  * needs an email; the detector flags those separately).
  */
 export function membersForContact(ctx: ReconContext): MemberForContact[] {
-  const byApp = new Map<string, { appId: string; name: string; email: string; classes: Set<string> }>();
+  const byApp = new Map<string, { appId: string; name: string; email: string; phone: string; classes: Set<string> }>();
   for (const link of ctx.links) {
     if (!link.app) continue;
     const entry =
       byApp.get(link.app.id) ||
-      byApp.set(link.app.id, { appId: link.app.id, name: link.app.rawName, email: link.app.email, classes: new Set() }).get(link.app.id)!;
+      byApp
+        .set(link.app.id, { appId: link.app.id, name: link.app.rawName, email: link.app.email, phone: link.app.phone || '', classes: new Set() })
+        .get(link.app.id)!;
     const cls = (link.master.classNumber || '').trim();
     if (cls) entry.classes.add(cls);
   }
+  // A contact needs SOME reachable detail — an email or a phone. Members with
+  // neither are dropped (the detector flags them separately).
   return [...byApp.values()]
-    .filter((m) => isEmailShaped(m.email))
-    .map((m) => ({ appId: m.appId, name: m.name, email: m.email, classNumbers: [...m.classes] }));
+    .filter((m) => isEmailShaped(m.email) || isPhoneShaped(m.phone))
+    .map((m) => ({ appId: m.appId, name: m.name, email: m.email, phone: m.phone, classNumbers: [...m.classes] }));
 }
 
 /** Builds the desired contact end-state, deriving teacher/level labels from class info. */
@@ -138,24 +162,37 @@ export function buildDesiredContacts(
       if (info && info.level) labels.add(levelLabel(info.level));
     }
     const { family, given } = splitName(m.name);
-    return { email: emailKey(m.email), family, given, labels: [...labels].sort() };
+    // Email is the primary contact detail; fall back to phone only when there's no email.
+    const email = isEmailShaped(m.email) ? emailKey(m.email) : '';
+    const phone = !email && m.phone && isPhoneShaped(m.phone) ? m.phone : '';
+    return { email, phone, family, given, labels: [...labels].sort() };
   });
 }
 
-/** Diffs desired vs existing (keyed by email) into a scoped create/update/remove plan. */
+/** Diffs desired vs existing (keyed by email, or phone for phone-only) into a scoped plan. */
 export function diffContacts(desired: DesiredContact[], existing: ExistingContact[]): ContactPlan {
-  const desiredByEmail = new Map(desired.map((d) => [emailKey(d.email), d]));
-  const existingByEmail = new Map(existing.map((e) => [emailKey(e.email), e]));
+  const desiredById = new Map<string, DesiredContact>();
+  for (const d of desired) {
+    const id = contactId(d.email, d.phone);
+    if (id) desiredById.set(id, d);
+  }
+  const existingById = new Map<string, ExistingContact>();
+  for (const e of existing) {
+    const id = contactId(e.email, e.phone);
+    if (id) existingById.set(id, e);
+  }
 
   const toCreate: ContactCreate[] = [];
   const toUpdate: ContactUpdate[] = [];
   const toRemove: ContactRemove[] = [];
   let unchangedCount = 0;
 
-  for (const [email, d] of desiredByEmail) {
-    const cur = existingByEmail.get(email);
+  for (const [, d] of desiredById) {
+    const id = contactId(d.email, d.phone);
+    const display = d.email || d.phone;
+    const cur = existingById.get(id);
     if (!cur) {
-      toCreate.push({ email, family: d.family, given: d.given, labels: d.labels });
+      toCreate.push({ contact: display, email: d.email, phone: d.phone, family: d.family, given: d.given, labels: d.labels });
       continue;
     }
     const want = new Set(d.labels);
@@ -165,7 +202,7 @@ export function diffContacts(desired: DesiredContact[], existing: ExistingContac
     const nameChanged = nameKey(cur.displayName) !== nameKey(`${d.family} ${d.given}`);
     if (labelsToAdd.length || labelsToRemove.length || nameChanged) {
       toUpdate.push({
-        email,
+        contact: display,
         resourceName: cur.resourceName,
         etag: cur.etag,
         fromName: cur.displayName,
@@ -180,9 +217,9 @@ export function diffContacts(desired: DesiredContact[], existing: ExistingContac
     }
   }
 
-  for (const [email, e] of existingByEmail) {
-    if (!desiredByEmail.has(email)) {
-      toRemove.push({ email, resourceName: e.resourceName, displayName: e.displayName });
+  for (const [id, e] of existingById) {
+    if (!desiredById.has(id)) {
+      toRemove.push({ contact: e.email || e.phone, resourceName: e.resourceName, displayName: e.displayName });
     }
   }
 

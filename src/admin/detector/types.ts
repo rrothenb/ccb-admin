@@ -19,10 +19,12 @@ export type Engine = 'rule' | 'fuzzy' | 'ai';
 /** Stable machine codes for each kind of finding (used for dedup + resolution memory). */
 export type FindingCode =
   | 'name-collision'          // same normalized name appears >1x within/across a source
-  | 'master-not-in-app'       // Master member with no App record, but creatable (a Register email exists)
+  | 'master-not-in-app'       // Master member with no App record, but creatable (a Register email matched by name)
+  | 'master-household-email'  // Master member with no App record; only email is a same-surname household guess — verify
   | 'master-no-email'         // Master member with no App record AND no email anywhere — can't be created
   | 'app-active-not-in-master'// App member still active but absent from current-year Master
   | 'fuzzy-name-match'        // near-name candidate link Master↔App — human must confirm
+  | 'spelling-disagreement'   // same person spelled differently across sources — suggests the likely typo
   | 'email-bridge-match'      // linked via Register household email, not by name — confirm
   | 'dropout-contradiction'   // name marked dropout/non-renewal yet also active
   | 'unpaid-but-active'       // active status but payment missing
@@ -31,6 +33,7 @@ export type FindingCode =
   | 'missing-email'           // App member has no email
   | 'malformed-email'         // App email fails a basic shape check
   | 'duplicate-email'         // same email on >1 App member
+  | 'email-drift'             // app email differs from the Contacts email for the same person
   | 'children-aggregated';    // several Master child-rows fold into one App parent record
 
 /** A single detector finding. `key` is a stable identity so resolutions persist year-to-year. */
@@ -68,14 +71,29 @@ export interface MasterRow {
   rowNumber: number;
 }
 
-/** A parsed Register entry (per-teacher attendance grid — downstream; source of class + household email). */
+/** A parsed Register entry (per-teacher attendance grid — downstream; source of class + household contact). */
 export interface RegisterRow {
   rawName: string;
   email: string;
+  /** A phone from the contact cell when it holds a number instead of an email ('' if none). */
+  phone?: string;
   /** Class id from the "Class N / Teacher" header the row sits under. */
   classId: string;
   teacher: string;
   level: string;
+}
+
+/**
+ * A read-only entry from the master account's Gmail Contacts. Every contact is
+ * (or was) a member, so contacts corroborate email + name and can supply an email
+ * for a member the app lacks. The detector only READS these — the projection
+ * spoke is the only thing that ever writes Contacts.
+ */
+export interface ContactRecord {
+  rawName: string;
+  email: string;
+  /** A phone number the contact carries ('' if none) — some members are phone-only. */
+  phone?: string;
 }
 
 /** The subset of an app Borrower the detector needs (App owns contact info + is truth for email). */
@@ -83,6 +101,8 @@ export interface AppMember {
   id: string;
   rawName: string;
   email: string;
+  /** Phone as stored in the app ('' if none) — a member may be phone-only. */
+  phone?: string;
   /** Current expiry as stored in the app ('' if none). */
   expiryDate: string;
 }
@@ -98,6 +118,8 @@ export interface DetectorInput {
   register: RegisterRow[];
   app: AppMember[];
   roster: ClassRoster;
+  /** The master account's Gmail Contacts (read-only corroborating source). Optional — defaults to none. */
+  contacts?: ContactRecord[];
 }
 
 /** The detector's output: the worklist, plus roll-ups for the UI. */

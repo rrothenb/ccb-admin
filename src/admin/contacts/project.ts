@@ -54,7 +54,7 @@ function pickMasterTab(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): GoogleApps
 function loadAppMembers(): AppMember[] {
   const res = getBorrowerService().getAll();
   if (!res.success || !res.data) throw new Error(`Could not read app members: ${res.error || 'unknown error'}`);
-  return res.data.map((b) => ({ id: String(b.id), rawName: b.name, email: b.email || '', expiryDate: b.expiryDate || '' }));
+  return res.data.map((b) => ({ id: String(b.id), rawName: b.name, email: b.email || '', phone: b.phone || '', expiryDate: b.expiryDate || '' }));
 }
 
 /** All contact groups (labels), mapped both ways. */
@@ -87,12 +87,13 @@ function readManagedContacts(umbrellaResource: string, byResource: Map<string, s
   const out: ExistingContact[] = [];
   for (let i = 0; i < memberResourceNames.length; i += 200) {
     const chunk = memberResourceNames.slice(i, i + 200);
-    const batch = People.People.getBatchGet({ resourceNames: chunk, personFields: 'names,emailAddresses,memberships' });
+    const batch = People.People.getBatchGet({ resourceNames: chunk, personFields: 'names,emailAddresses,phoneNumbers,memberships' });
     for (const resp of batch.responses || []) {
       const person = resp.person;
       if (!person) continue;
       const email = ((person.emailAddresses && person.emailAddresses[0] && person.emailAddresses[0].value) || '').toLowerCase();
-      if (!email) continue;
+      const phone = (person.phoneNumbers && person.phoneNumbers[0] && person.phoneNumbers[0].value) || '';
+      if (!email && !phone) continue; // a managed contact keyed by neither can't be diffed
       const displayName = (person.names && person.names[0] && person.names[0].displayName) || '(no name)';
       const labels: string[] = [];
       for (const mem of person.memberships || []) {
@@ -100,7 +101,7 @@ function readManagedContacts(umbrellaResource: string, byResource: Map<string, s
         const labelName = rn && byResource.get(rn);
         if (labelName && isManagedLabel(labelName)) labels.push(labelName);
       }
-      out.push({ email, resourceName: person.resourceName, etag: person.etag, displayName, labels: labels.sort() });
+      out.push({ email, phone, resourceName: person.resourceName, etag: person.etag, displayName, labels: labels.sort() });
     }
   }
   return out;
@@ -196,7 +197,13 @@ function applyContactProjection(
     let removed = 0;
 
     for (const c of plan.toCreate) {
-      const person = People.People.createContact({ names: [{ givenName: c.given, familyName: c.family }], emailAddresses: [{ value: c.email }] });
+      // Route the detail to the right People field: email vs phone.
+      const body: { names: object[]; emailAddresses?: object[]; phoneNumbers?: object[] } = {
+        names: [{ givenName: c.given, familyName: c.family }],
+      };
+      if (c.email) body.emailAddresses = [{ value: c.email }];
+      if (c.phone) body.phoneNumbers = [{ value: c.phone }];
+      const person = People.People.createContact(body);
       for (const label of c.labels) {
         People.ContactGroups.Members.modify({ resourceNamesToAdd: [person.resourceName] }, labelRes(label));
       }

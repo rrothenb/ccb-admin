@@ -20,6 +20,7 @@ import { parseRegisterTabs } from './ingest/register';
 import { membershipExpiry } from './expiry';
 import { planExpiryWrites, ChangePlan } from './plan';
 import { uploadedXlsxToSheetId, trashSheet, sheetToStringGrid } from './ingest/xlsx';
+import { readAllContacts } from './contacts/read';
 import { getBorrowerService } from '../services/borrowers';
 import { logAdmin } from './log';
 
@@ -34,6 +35,7 @@ export interface SyncDetectResult {
     masterMembers: number;
     registerStudents: number;
     appMembers: number;
+    contacts: number;
     classIds: string[];
     masterTab: string;
     masterHeaderRow: number;
@@ -63,6 +65,7 @@ function loadAppMembers(): AppMember[] {
     id: String(b.id),
     rawName: b.name,
     email: b.email || '',
+    phone: b.phone || '',
     expiryDate: b.expiryDate || '',
   }));
 }
@@ -103,12 +106,21 @@ function runMembershipSync(
     // --- App members ---
     const app = loadAppMembers();
 
+    // --- Contacts (read-only corroborating source) ---
+    // Never fatal: if the People read fails, detection still runs without it.
+    let contacts: ReturnType<typeof readAllContacts> = [];
+    try {
+      contacts = readAllContacts();
+    } catch (e) {
+      logAdmin(`Contacts read skipped (continuing without): ${e}`);
+    }
+
     // Interim roster: bootstrap valid class ids from the Register until the
     // ratified canonical roster is stored. Keeps nonexistent-class meaningful
     // without falsely flagging classes the Register clearly knows about.
     const classIds = Array.from(new Set(register.map((r) => r.classId).filter(Boolean)));
 
-    const input: DetectorInput = { master, register, app, roster: { validClassIds: classIds } };
+    const input: DetectorInput = { master, register, app, roster: { validClassIds: classIds }, contacts };
     // Reconcile once and share the context with both the rules and the change plan.
     const ctx = reconcile(input);
     const report = runDetector(input, { context: ctx });
@@ -119,7 +131,7 @@ function runMembershipSync(
 
     logAdmin(
       `Sync detection run: ${master.length} Master members, ${register.length} Register students, ` +
-        `${app.length} app members → ${report.counts.block} block / ${report.counts.confirm} confirm / ${report.counts.fyi} fyi ` +
+        `${app.length} app members, ${contacts.length} contacts → ${report.counts.block} block / ${report.counts.confirm} confirm / ${report.counts.fyi} fyi ` +
         `(uniform expiry ${computedExpiry})`
     );
 
@@ -131,6 +143,7 @@ function runMembershipSync(
         masterMembers: master.length,
         registerStudents: register.length,
         appMembers: app.length,
+        contacts: contacts.length,
         classIds,
         masterTab: masterTab.getName(),
         masterHeaderRow: masterParse.headerRow,

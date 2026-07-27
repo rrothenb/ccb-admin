@@ -1,6 +1,10 @@
 import { runRules } from './rules';
 import { reconcile } from './match';
-import { DetectorInput, MasterRow, RegisterRow, AppMember, FindingCode } from './types';
+import { DetectorInput, MasterRow, RegisterRow, AppMember, ContactRecord, FindingCode } from './types';
+
+function contact(rawName: string, email: string): ContactRecord {
+  return { rawName, email };
+}
 
 const NOW = new Date('2026-07-09');
 
@@ -68,6 +72,89 @@ describe('cross-presence', () => {
     expect(f.tier).toBe('block');
   });
 
+  it('recovers a whole-name Register match when "/" separates surname from given (fyi, not block)', () => {
+    const codesOut = codes({
+      master: [master('CELARIER-FRAUDET, Alban')],
+      register: [reg('CELARIER Fraudet / Alban', 'laurine@ex.fr')],
+      app: [],
+    });
+    expect(codesOut).toContain('master-not-in-app');
+    expect(codesOut).not.toContain('master-no-email');
+  });
+
+  it('recovers an annotation-stripped Register name match (fyi, not block)', () => {
+    const codesOut = codes({
+      master: [master('DUSAUSOY, Zélie 5 ans')],
+      register: [reg('DUSAUSOY Zelie (4Yrs)', 'v@ex.fr')],
+      app: [],
+    });
+    expect(codesOut).toContain('master-not-in-app');
+    expect(codesOut).not.toContain('master-no-email');
+  });
+
+  it('offers a same-surname household email as a confirm (verify), never a silent block', () => {
+    const findings = run({
+      master: [master('CORDONNIER - Bernard-Philippe')],
+      register: [reg('CORDONNIER Philippe', 'ph@ex.fr')],
+      app: [],
+    });
+    const f = findings.find((x) => x.code === 'master-household-email')!;
+    expect(f.tier).toBe('confirm');
+    expect(f.message).toContain('ph@ex.fr');
+    expect(findings.map((x) => x.code)).not.toContain('master-no-email');
+  });
+
+  it('still BLOCKS when even the surname yields no Register email', () => {
+    const codesOut = codes({
+      master: [master('MAOUCHE, Hamida')],
+      register: [reg('SOMEONE, Else', 'else@ex.fr')],
+      app: [],
+    });
+    expect(codesOut).toContain('master-no-email');
+    expect(codesOut).not.toContain('master-household-email');
+  });
+
+  it('un-blocks a phone-only member using their Register phone (creatable, not blocked)', () => {
+    const codesOut = codes({
+      master: [master('AFASSE, Amine')],
+      register: [reg('AFASSE Amine', '', { phone: '06 48 41 34 70' })],
+      app: [],
+    });
+    expect(codesOut).toContain('master-not-in-app'); // creatable via phone
+    expect(codesOut).not.toContain('master-no-email');
+  });
+
+  it('does NOT block a CURRENT member who has a phone but no email', () => {
+    expect(codes({
+      master: [master('Phone, Only')],
+      app: [app('B1', 'Phone, Only', '', { phone: '06 48 41 34 70' })],
+    })).not.toContain('missing-email');
+  });
+
+  it('un-blocks a member using a Contacts email when the Register has none', () => {
+    const codesOut = codes({
+      master: [master('MAOUCHE, Hamida')],
+      register: [],
+      app: [],
+      contacts: [contact('MAOUCHE, Hamida', 'hamida@ex.fr')],
+    });
+    expect(codesOut).toContain('master-not-in-app'); // creatable via Contacts, not blocked
+    expect(codesOut).not.toContain('master-no-email');
+  });
+
+  it('offers a same-surname Contacts email as a household confirm (not a block)', () => {
+    const findings = run({
+      master: [master('FOURWICZ, Jean-Luc')],
+      register: [],
+      app: [],
+      contacts: [contact('FOURWICZ, Danielle', 'fourwicz.home@ex.fr')],
+    });
+    const f = findings.find((x) => x.code === 'master-household-email')!;
+    expect(f.tier).toBe('confirm');
+    expect(f.message).toContain('Contacts');
+    expect(findings.map((x) => x.code)).not.toContain('master-no-email');
+  });
+
   it('rolls active-but-not-in-Master members into ONE fyi (not per person)', () => {
     const findings = run({
       master: [master('Present, Pat')],
@@ -95,6 +182,77 @@ describe('link quality', () => {
     const f = run({ master: [master('Martin, Louise')], app: [app('B1', 'Martin, Louisa')] })
       .find((x) => x.code === 'fuzzy-name-match')!;
     expect(f.tier).toBe('block');
+  });
+
+  it('enriches the fuzzy-name block with a three-way + email suggestion of the likely fix', () => {
+    // App spelling is the odd one out; Master + Register agree, and the email backs them.
+    const f = run({
+      master: [master('JUILIEN, Laurent')],
+      register: [reg('JUILIEN, Laurent', 'laurent.juilien@ex.fr', { classId: '1' })],
+      app: [app('B1', 'JULIEN, Laurent', 'laurent.juilien@ex.fr')],
+    }).find((x) => x.code === 'fuzzy-name-match')!;
+    expect(f.tier).toBe('block'); // still a hard block — names must agree to sync
+    expect(f.message).toContain('Likely correct: "JUILIEN, Laurent"');
+    expect(f.message).toContain('App'); // points at the App as the one to fix
+  });
+
+  it('flags a Master↔Register spelling disagreement as a confirm and suggests the fix', () => {
+    const f = run({
+      master: [master('JUILIEN, Laurent')],
+      register: [reg('JULIEN, Laurent', 'laurent.juilien@ex.fr', { classId: '1' })],
+      app: [app('B1', 'JUILIEN, Laurent', 'laurent.juilien@ex.fr')],
+    }).find((x) => x.code === 'spelling-disagreement')!;
+    expect(f.tier).toBe('confirm');
+    expect(f.message).toContain('JULIEN, Laurent');
+    expect(f.message).toContain('Likely correct: "JUILIEN, Laurent"');
+    expect(f.message).toContain('Nothing is changed automatically');
+  });
+
+  it('does NOT flag a spelling disagreement on formatting/annotation-only differences', () => {
+    expect(codes({
+      master: [master('DUSAUSOY, Zélie 5 ans')],
+      register: [reg('DUSAUSOY Zelie (4Yrs)', 'v@ex.fr')],
+      app: [],
+    })).not.toContain('spelling-disagreement');
+  });
+
+  it('does NOT flag two different siblings as a spelling disagreement', () => {
+    expect(codes({
+      master: [master('GRIMONT-PARISOT, June')],
+      register: [reg('GRIMONT-PARISOT, Jade', 'jade.grimontparisot@ex.fr')],
+      app: [],
+    })).not.toContain('spelling-disagreement');
+  });
+
+  it('lets a Contacts entry (matched by the app email) vote on the spelling', () => {
+    // App+Contacts share the email, but Contacts spells the name correctly →
+    // the app is the outlier and the vote should point at it.
+    const f = run({
+      master: [master('JUILIEN, Laurent')],
+      register: [],
+      app: [app('B1', 'JULIEN, Laurent', 'laurent.juilien@ex.fr')],
+      contacts: [contact('JUILIEN, Laurent', 'laurent.juilien@ex.fr')],
+    }).find((x) => x.code === 'spelling-disagreement' || x.code === 'fuzzy-name-match')!;
+    expect(f.message).toContain('Likely correct: "JUILIEN, Laurent"');
+  });
+
+  it('flags app-vs-Contacts email drift for a current member as a confirm', () => {
+    const f = run({
+      master: [master('Solo, Kim')],
+      app: [app('B1', 'Solo, Kim', 'kim.old@ex.fr')],
+      contacts: [contact('Solo, Kim', 'kim.new@ex.fr')],
+    }).find((x) => x.code === 'email-drift')!;
+    expect(f.tier).toBe('confirm');
+    expect(f.message).toContain('kim.old@ex.fr');
+    expect(f.message).toContain('kim.new@ex.fr');
+  });
+
+  it('does NOT flag email drift when app and Contacts agree', () => {
+    expect(codes({
+      master: [master('Solo, Kim')],
+      app: [app('B1', 'Solo, Kim', 'kim@ex.fr')],
+      contacts: [contact('Solo, Kim', 'KIM@EX.FR')],
+    })).not.toContain('email-drift');
   });
 
   it('raises a needs-review (not block) for an email-bridge match — the household mechanism', () => {
@@ -157,6 +315,16 @@ describe('class checks', () => {
       master: [master('Split, Sky', { classNumber: '1' })],
       register: [reg('Split, Sky', 's@ex.fr', { classId: '2' })],
       app: [app('B1', 'Split, Sky', 's@ex.fr')],
+    })).toContain('class-disagreement');
+  });
+
+  it('still cross-checks class when the Master name carries an annotation', () => {
+    // Previously the annotated Master name never matched the Register row, so this
+    // disagreement was silently missed.
+    expect(codes({
+      master: [master('DUSAUSOY, Zélie 5 ans', { classNumber: '1' })],
+      register: [reg('DUSAUSOY Zelie (4Yrs)', 'v@ex.fr', { classId: '2' })],
+      app: [app('B1', 'DUSAUSOY, Zélie 5 ans', 'v@ex.fr')],
     })).toContain('class-disagreement');
   });
 
