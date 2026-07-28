@@ -269,12 +269,15 @@ function linkQuality(ctx: ReconContext): Finding[] {
     if (!link.app) continue;
     if (link.kind === 'fuzzy') {
       const suggestion = suggestionText(voteSpelling(spellingCluster(ctx, link)));
+      // With a suggestion, the vote carries the "same person or not?" nuance; without
+      // one, add a short caution that references THIS pair (not a canned example).
+      const tail = suggestion || ' They could be one misspelled name or two different people — confirm before making them match.';
       out.push(
         make(
           'fuzzy-name-match',
           'block',
           'fuzzy',
-          `Master "${link.master.rawName}" looks like app member "${link.app.rawName}" (edit distance ${link.distance}), but the names aren't identical. Names must match exactly to sync — fix the name in the app or the Master so they agree (do not assume Louise = Louisa).${suggestion}`,
+          `Master "${link.master.rawName}" looks like app member "${link.app.rawName}" (edit distance ${link.distance}), but the names aren't identical. Names must match exactly to sync — fix the name in the app or the Master so they agree.${tail}`,
           [link.master.rawName, link.app.rawName],
           `Master row ${link.master.rowNumber}`
         )

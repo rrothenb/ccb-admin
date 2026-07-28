@@ -182,6 +182,9 @@ describe('link quality', () => {
     const f = run({ master: [master('Martin, Louise')], app: [app('B1', 'Martin, Louisa')] })
       .find((x) => x.code === 'fuzzy-name-match')!;
     expect(f.tier).toBe('block');
+    // No canned "Louise = Louisa" boilerplate; the caution references this pair instead.
+    expect(f.message).not.toContain('do not assume');
+    expect(f.message).toContain('two different people');
   });
 
   it('enriches the fuzzy-name block with a three-way + email suggestion of the likely fix', () => {
