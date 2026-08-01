@@ -4,6 +4,7 @@
 
 import { Media, MediaType, MEDIA_COLUMNS, OperationResult } from '../types';
 import { BaseEntityService } from './base-service';
+import { soleContainingBoxOf, unboxedBarcodes } from '../utils/box';
 import {getLoanService} from "./loans";
 
 /**
@@ -195,10 +196,15 @@ class MediaService extends BaseEntityService<Media> {
    * hand. Resources with zero matching copies are still returned (with
    * `availableCount: 0`) so the UI can explain "all copies are out" rather than
    * "not found".
+   *
+   * Copies inside a box set are never individually borrowable, so they don't
+   * count as available. When every copy of a match is boxed, `insideBox` names
+   * the box so the UI can say "check out the box instead" rather than the
+   * misleading "all copies out".
    */
   searchAvailableResources(
     query: string
-  ): OperationResult<{ id: string; title: string; author: string; classification: string; availableCount: number }[]> {
+  ): OperationResult<{ id: string; title: string; author: string; classification: string; availableCount: number; insideBox: string }[]> {
     const result = this.getAll();
     if (!result.success || !result.data) {
       return { ...result, data: [] };
@@ -211,7 +217,7 @@ class MediaService extends BaseEntityService<Media> {
     const lowerQuery = query.trim().toLowerCase();
     if (!lowerQuery) return { success: true, data: [] };
 
-    const matches: { id: string; title: string; author: string; classification: string; availableCount: number }[] = [];
+    const matches: { id: string; title: string; author: string; classification: string; availableCount: number; insideBox: string }[] = [];
     for (const resource of result.data) {
       const barcodes = `${resource.barcodes ?? ''}`.split('|').map((b) => b.trim()).filter(Boolean);
       const haystacks = [
@@ -222,13 +228,16 @@ class MediaService extends BaseEntityService<Media> {
         barcodes.some((b) => b.toLowerCase().includes(lowerQuery));
       if (!isMatch) continue;
 
-      const availableCount = barcodes.filter((b) => !onLoan.has(b.toLowerCase())).length;
+      // Only standalone copies can leave the building on their own.
+      const availableCount = unboxedBarcodes(resource).filter((b) => !onLoan.has(b.toLowerCase())).length;
+      const box = soleContainingBoxOf(resource, result.data);
       matches.push({
         id: resource.id,
         title: `${resource.title ?? ''}`,
         author: `${resource.author ?? ''}`,
         classification: `${resource.classification ?? ''}`,
         availableCount,
+        insideBox: box ? box.boxTitle : '',
       });
     }
     return { success: true, data: matches };

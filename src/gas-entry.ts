@@ -19,32 +19,8 @@ import { getBorrowerService } from './services/borrowers';
 import { getMediaService, CLASSIFICATIONS, classificationMatches, matchesAnyClassification, NONE_VALUE, UNCLASSIFIED_VALUE, ClassificationOption } from './services/media';
 import { getLoanService } from './services/loans';
 import { writeAuditLog, setAuditLogSpreadsheetId, getAuditLogSpreadsheetId } from './services/audit-log';
-import { Media, Loan } from './types';
-
-/**
- * If `barcode` (one of `media`'s own copies) is assigned to a parent box via
- * `media.resourceBox`, returns the containing box's barcode and title.
- */
-function findContainingBox(
-  media: Media,
-  barcode: string,
-  allMedia: Media[]
-): { boxBarcode: string; boxTitle: string } | null {
-  if (!media.resourceBox) return null;
-  let parsed: Record<string, unknown>;
-  try {
-    parsed = JSON.parse(media.resourceBox);
-  } catch {
-    return null;
-  }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-  const boxBarcode = parsed[barcode];
-  if (typeof boxBarcode !== 'string' || !boxBarcode) return null;
-  const box = allMedia.find((m) =>
-    (m.barcodes || '').split('|').map((b) => b.trim()).includes(boxBarcode)
-  );
-  return { boxBarcode, boxTitle: box?.title || boxBarcode };
-}
+import { Loan } from './types';
+import { containingBoxOf, soleContainingBoxOf, unboxedBarcodes } from './utils/box';
 
 // ============================================================================
 // WEB APP ENTRY POINT
@@ -589,7 +565,7 @@ function checkoutByBarcode(
     return { success: false, notFound: true, error: `Barcode ${barcode} not found in catalog` };
   }
 
-  const containing = findContainingBox(foundMedia, canonicalBarcode, allMedia.data);
+  const containing = containingBoxOf(foundMedia, canonicalBarcode, allMedia.data);
   if (containing) {
     return {
       success: false,
@@ -613,7 +589,7 @@ function checkoutByBarcode(
  */
 function findAvailableForCheckout(
   query: string
-): { id: string; title: string; author: string; classification: string; availableCount: number }[] {
+): { id: string; title: string; author: string; classification: string; availableCount: number; insideBox: string }[] {
   const user = Session.getActiveUser().getEmail();
   Logger.log(`[AUDIT] ${user} searched to check out by name: "${query}"`);
 
@@ -657,8 +633,18 @@ function checkoutByResource(
     (allLoans.success && allLoans.data ? allLoans.data : []).map((l) => `${l.barcode ?? ''}`.trim().toLowerCase())
   );
 
-  const barcodes = (media.barcodes || '').split('|').map((b: string) => b.trim()).filter(Boolean);
-  const available = barcodes.filter((b) => !onLoan.has(b.toLowerCase()));
+  // Boxed copies never circulate on their own, so they are not candidates —
+  // excluded before the counts below, or a title with one boxed and one loose
+  // copy would look ambiguous when only one copy could actually be taken.
+  const boxed = soleContainingBoxOf(media, allMedia.data);
+  if (boxed) {
+    return {
+      success: false,
+      error: `"${media.title}" is inside box "${boxed.boxTitle}" (${boxed.boxBarcode}). Check out the box instead.`,
+    };
+  }
+
+  const available = unboxedBarcodes(media).filter((b) => !onLoan.has(b.toLowerCase()));
 
   if (available.length === 0) {
     return { success: false, error: `No copies of "${media.title}" are available — every copy is already checked out.` };
@@ -671,14 +657,6 @@ function checkoutByResource(
   }
 
   const canonicalBarcode = available[0];
-
-  const containing = findContainingBox(media, canonicalBarcode, allMedia.data);
-  if (containing) {
-    return {
-      success: false,
-      error: `"${media.title}" (${canonicalBarcode}) is inside box "${containing.boxTitle}" (${containing.boxBarcode}). Check out the box instead.`,
-    };
-  }
 
   const result = loanService.checkout(borrowerId, canonicalBarcode, media.id, borrowerName, media.title, loanDays);
   if (result.success) {
@@ -715,7 +693,7 @@ function returnLoanByBarcode(barcode: string): { success: boolean; title?: strin
       (m.barcodes || '').split('|').map((b) => b.trim().toLowerCase()).includes(target)
     );
     if (owningMedia) {
-      const containing = findContainingBox(owningMedia, loan.barcode, allMedia.data);
+      const containing = containingBoxOf(owningMedia, loan.barcode, allMedia.data);
       if (containing) {
         return {
           success: false,

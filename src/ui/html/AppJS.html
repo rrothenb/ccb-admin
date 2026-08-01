@@ -1315,14 +1315,22 @@
         container.innerHTML = results.slice(0, 20).map(function (r) {
           var meta = [r.author, r.classification].filter(function (s) { return s; }).join(' · ');
           var hint, hintColor;
-          if (r.availableCount === 1) {
+          // Boxed-only titles can never be taken on their own, so say which box
+          // to fetch instead of offering a click that would only be refused.
+          if (r.insideBox) {
+            hint = 'in box “' + r.insideBox + '” — check out the box'; hintColor = '#991b1b';
+          } else if (r.availableCount === 1) {
             hint = '1 available'; hintColor = '#166534';
           } else if (r.availableCount === 0) {
             hint = 'all copies out'; hintColor = '#991b1b';
           } else {
             hint = r.availableCount + ' copies — scan barcode'; hintColor = '#92400e';
           }
-          return '<div class="autocomplete-item" onclick="checkoutResourceByName(\'' + escapeAttr(r.id) + '\')">' +
+          var click = r.insideBox
+            ? ''
+            : ' onclick="checkoutResourceByName(\'' + escapeAttr(r.id) + '\')"';
+          return '<div class="autocomplete-item"' + click +
+            (r.insideBox ? ' style="cursor:default;opacity:0.75"' : '') + '>' +
             escapeHtml(r.title) +
             (meta ? ' <span class="author">(' + escapeHtml(meta) + ')</span>' : '') +
             ' <span style="float:right;font-size:12px;color:' + hintColor + '">' + escapeHtml(hint) + '</span>' +

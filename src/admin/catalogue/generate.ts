@@ -14,6 +14,7 @@
 
 import { getMediaService, classificationMatches } from '../../services/media';
 import { Media } from '../../types';
+import { isFullyBoxed } from '../../utils/box';
 import { logAdmin } from '../log';
 import {
   authorTitleSection,
@@ -238,7 +239,13 @@ function generateCatalogue(): CatalogueResult {
   if (!mediaResult.success || !mediaResult.data) {
     return { success: false, error: mediaResult.error || 'Could not read the Media sheet.' };
   }
-  const media = mediaResult.data.filter((m) => `${m.title ?? ''}`.trim());
+  // The catalogue lists what a member can actually borrow, so a resource whose
+  // every copy sits inside a box set is left out: only the box itself
+  // circulates, and listing its discs would both mislead and inflate the
+  // counts. A title with a loose copy as well as a boxed one still appears.
+  // (What a box *should* contain is answered by the Resources editor, which
+  // lists a box's contents from the same mapping.)
+  const media = mediaResult.data.filter((m) => `${m.title ?? ''}`.trim() && !isFullyBoxed(m));
   const generatedAt = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'd MMM yyyy, HH:mm');
 
   const matched = new Set<Media>();
