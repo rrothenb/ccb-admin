@@ -1,16 +1,28 @@
 /**
  * Gmail Contacts projection planner (pure).
  *
- * The master account's Contacts are a one-way projection of current members:
- * each member becomes a contact tagged with labels (Contacts "groups") for their
- * class number, teacher, and level, all under an umbrella `CCB Members` label.
- * The master can then email a whole class/teacher/level straight from Gmail's To:.
+ * Each current member becomes a contact carrying labels (Contacts "groups") that
+ * follow the org's OWN convention, which is year-scoped:
  *
- * SAFETY — the same invariants the spike proved:
- *  - We only ever manage labels in the `CCB ` namespace and contacts inside the
- *    `CCB Members` umbrella; personal contacts/labels are never read or touched.
- *  - The plan is a scoped diff/upsert (create/update/relabel/remove) — never
- *    nuke-and-repave. The email is the app↔Contacts join key.
+ *   26/27                          — everyone in this school year
+ *   26/27 Class 10 Paula           — one class in this school year
+ *   Level U Intermediate (B2+)     — a level, across all years
+ *   Teacher Paula                  — a teacher, across all years
+ *
+ * The year labels are the important part: they're how the org messages alumni.
+ * Last year's "25/26 Class 10 Paula" is history, and history is never rewritten.
+ *
+ * SAFETY — the projection is therefore ADDITIVE ONLY:
+ *  - contacts are never deleted and labels are never removed, so past years stay
+ *    intact and a contact that already exists simply gains the labels it lacks;
+ *  - an existing contact's name and fields are left exactly as they are (we only
+ *    set a name on a contact we create) — the admin's own edits win;
+ *  - the email (or phone, for a phone-only member) is the join key, matched
+ *    across the whole address book so a member is never duplicated.
+ *
+ * That means the plan can't "clean up" a wrong label — but wrong labels are rare,
+ * fixable in Gmail, and vastly preferable to a projection that can silently
+ * delete a contact or a year of history.
  *
  * Pure module (no People API) so the diff logic is unit-testable; the GAS layer
  * reads/writes Contacts and maps label names ↔ resourceNames.
@@ -33,19 +45,27 @@ export function contactId(email: string, phone: string): string {
   return '';
 }
 
-/** The umbrella label every managed contact belongs to — the primary safety scope. */
-export const UMBRELLA_LABEL = 'CCB Members';
+/**
+ * The year-scoped labels, written exactly as the org already writes them:
+ * "26/27" and "26/27 Class 10 Paula". A class with no known teacher just drops
+ * that part ("26/27 Class 10") rather than inventing a placeholder.
+ */
+export const yearLabel = (year: string): string => year.trim();
+export function yearClassLabel(year: string, classNumber: string, teacher: string): string {
+  const base = `${year.trim()} Class ${classNumber.trim()}`;
+  return teacher.trim() ? `${base} ${teacher.trim()}` : base;
+}
 
-// Per-member labels drop the "CCB " prefix (the umbrella already namespaces us) —
-// they read cleaner in Gmail's To: field ("Class 1" not "CCB Class 1").
-export const classLabel = (n: string): string => `Class ${n.trim()}`;
+// Cross-year labels: a level or a teacher accumulates every member who has ever
+// been taught at/by it, which is exactly what makes them useful alongside the
+// year labels ("everyone who's ever been Intermediate").
 export const teacherLabel = (t: string): string => `Teacher ${t.trim()}`;
 export const levelLabel = (l: string): string => `Level ${normalizeLevel(l)}`;
 
-/** Matches the labels this projection manages. Applied only to contacts already in the umbrella. */
-const MANAGED_LABEL_RE = /^(Class|Teacher|Level) .+/;
-export function isManagedLabel(name: string): boolean {
-  return name === UMBRELLA_LABEL || MANAGED_LABEL_RE.test(name);
+/** True for a label this projection generates for `year` — used to spot stale year labels. */
+export function isYearLabel(name: string, year: string): boolean {
+  const y = year.trim();
+  return name === y || name.startsWith(`${y} Class `);
 }
 
 /**
@@ -74,14 +94,18 @@ export interface DesiredContact {
   labels: string[];
 }
 
-/** A contact currently in the managed umbrella (read from Contacts). */
+/**
+ * A contact that already exists in the account — ANY contact, not just one we
+ * created: the whole address book is searched by email/phone so a member who is
+ * already in Contacts gains labels instead of being duplicated.
+ */
 export interface ExistingContact {
   email: string;
   phone: string;
   resourceName: string;
   etag: string;
   displayName: string;
-  /** Only its `CCB `-namespaced labels. */
+  /** Every label it carries (ours and the admin's alike — we only ever add to this). */
   labels: string[];
 }
 
@@ -94,26 +118,33 @@ export interface ContactCreate {
   given: string;
   labels: string[];
 }
+/** An existing contact that will gain labels. Nothing else about it is touched. */
 export interface ContactUpdate {
   contact: string;
   resourceName: string;
-  etag: string;
-  fromName: string;
-  toFamily: string;
-  toGiven: string;
-  nameChanged: boolean;
+  /** How the contact is currently filed — shown so the admin can see who's being labelled. */
+  existingName: string;
+  /** What the membership data calls them; differing is fine and is NOT corrected. */
+  memberName: string;
+  nameDiffers: boolean;
   labelsToAdd: string[];
-  labelsToRemove: string[];
 }
-export interface ContactRemove {
+/**
+ * A contact carrying THIS year's labels who isn't in this year's cohort — the one
+ * thing an additive projection can't fix by itself. Reported, never acted on:
+ * usually it means someone was pulled from the Master after a previous run.
+ */
+export interface StaleYearLabel {
   contact: string;
-  resourceName: string;
   displayName: string;
+  /** The current-year labels they hold and (on this data) shouldn't. */
+  labels: string[];
 }
 export interface ContactPlan {
   toCreate: ContactCreate[];
   toUpdate: ContactUpdate[];
-  toRemove: ContactRemove[];
+  /** Advisory only — the admin removes these in Gmail if they're genuinely wrong. */
+  staleYearLabels: StaleYearLabel[];
   unchangedCount: number;
 }
 
@@ -187,18 +218,27 @@ export function membersForContact(ctx: ReconContext): MemberForContact[] {
     .map((m) => ({ id: m.id, name: m.name, email: m.email, phone: m.phone, classNumbers: [...m.classes] }));
 }
 
-/** Builds the desired contact end-state, deriving teacher/level labels from class info. */
+/**
+ * Builds the labels each member should carry this year. `year` is the org's own
+ * "26/27" form, so the labels this writes are indistinguishable from the ones
+ * they've been creating by hand — the point being that this year's projection
+ * lands in the same labels they'd have made themselves.
+ */
 export function buildDesiredContacts(
   members: MemberForContact[],
-  classInfo: Map<string, { teacher: string; level: string }>
+  classInfo: Map<string, { teacher: string; level: string }>,
+  year: string
 ): DesiredContact[] {
   return members.map((m) => {
-    const labels = new Set<string>([UMBRELLA_LABEL]);
+    const labels = new Set<string>();
+    // Everyone in the cohort gets the bare year label — "email the whole school".
+    if (year.trim()) labels.add(yearLabel(year));
     // A class number can name multiple classes ("11 & 12" → labels for both).
     for (const cls of m.classNumbers.flatMap(splitClassIds)) {
-      labels.add(classLabel(cls));
       const info = classInfo.get(cls);
-      if (info && info.teacher) labels.add(teacherLabel(info.teacher));
+      const teacher = (info && info.teacher) || '';
+      if (year.trim()) labels.add(yearClassLabel(year, cls, teacher));
+      if (teacher) labels.add(teacherLabel(teacher));
       if (info && info.level) labels.add(levelLabel(info.level));
     }
     const { family, given } = splitName(m.name);
@@ -209,8 +249,15 @@ export function buildDesiredContacts(
   });
 }
 
-/** Diffs desired vs existing (keyed by email, or phone for phone-only) into a scoped plan. */
-export function diffContacts(desired: DesiredContact[], existing: ExistingContact[]): ContactPlan {
+/**
+ * Diffs desired against the account's existing contacts (keyed by email, or phone
+ * for a phone-only member) into an ADDITIVE plan: create the people who aren't
+ * there, add the labels that are missing, touch nothing else.
+ *
+ * `year` lets it report the one thing it deliberately won't fix — a contact still
+ * carrying this year's labels who isn't in this year's cohort.
+ */
+export function diffContacts(desired: DesiredContact[], existing: ExistingContact[], year = ''): ContactPlan {
   const desiredById = new Map<string, DesiredContact>();
   for (const d of desired) {
     const id = contactId(d.email, d.phone);
@@ -219,49 +266,51 @@ export function diffContacts(desired: DesiredContact[], existing: ExistingContac
   const existingById = new Map<string, ExistingContact>();
   for (const e of existing) {
     const id = contactId(e.email, e.phone);
-    if (id) existingById.set(id, e);
+    // First writer wins: with duplicates in the address book we label the one we
+    // saw first rather than picking arbitrarily on each run.
+    if (id && !existingById.has(id)) existingById.set(id, e);
   }
 
   const toCreate: ContactCreate[] = [];
   const toUpdate: ContactUpdate[] = [];
-  const toRemove: ContactRemove[] = [];
+  const staleYearLabels: StaleYearLabel[] = [];
   let unchangedCount = 0;
 
-  for (const [, d] of desiredById) {
-    const id = contactId(d.email, d.phone);
+  for (const [id, d] of desiredById) {
     const display = d.email || d.phone;
     const cur = existingById.get(id);
     if (!cur) {
       toCreate.push({ contact: display, email: d.email, phone: d.phone, family: d.family, given: d.given, labels: d.labels });
       continue;
     }
-    const want = new Set(d.labels);
     const have = new Set(cur.labels);
-    const labelsToAdd = [...want].filter((l) => !have.has(l)).sort();
-    const labelsToRemove = [...have].filter((l) => !want.has(l)).sort();
-    const nameChanged = nameKey(cur.displayName) !== nameKey(`${d.family} ${d.given}`);
-    if (labelsToAdd.length || labelsToRemove.length || nameChanged) {
-      toUpdate.push({
-        contact: display,
-        resourceName: cur.resourceName,
-        etag: cur.etag,
-        fromName: cur.displayName,
-        toFamily: d.family,
-        toGiven: d.given,
-        nameChanged,
-        labelsToAdd,
-        labelsToRemove,
-      });
-    } else {
+    const labelsToAdd = d.labels.filter((l) => !have.has(l)).sort();
+    if (!labelsToAdd.length) {
       unchangedCount++;
+      continue;
+    }
+    // A name difference is reported, never corrected: this contact may be filed
+    // the way the admin wants it, and renaming someone's address book is rude.
+    const memberName = `${d.family}, ${d.given}`.replace(/, $/, '');
+    toUpdate.push({
+      contact: display,
+      resourceName: cur.resourceName,
+      existingName: cur.displayName,
+      memberName,
+      nameDiffers: nameKey(cur.displayName) !== nameKey(memberName),
+      labelsToAdd,
+    });
+  }
+
+  if (year.trim()) {
+    for (const [id, e] of existingById) {
+      if (desiredById.has(id)) continue;
+      const stale = e.labels.filter((l) => isYearLabel(l, year)).sort();
+      if (stale.length) {
+        staleYearLabels.push({ contact: e.email || e.phone, displayName: e.displayName, labels: stale });
+      }
     }
   }
 
-  for (const [id, e] of existingById) {
-    if (!desiredById.has(id)) {
-      toRemove.push({ contact: e.email || e.phone, resourceName: e.resourceName, displayName: e.displayName });
-    }
-  }
-
-  return { toCreate, toUpdate, toRemove, unchangedCount };
+  return { toCreate, toUpdate, staleYearLabels, unchangedCount };
 }

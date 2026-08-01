@@ -39,17 +39,32 @@ export function expiryForSchoolYear(startYear: number): string {
 }
 
 /**
- * The expiry every member in this Master should receive. Prefers the year in the
- * tab name; if that's unreadable, falls back to the current school year inferred
- * from `now` (before September → the year started last calendar year).
+ * Which school year this Master belongs to. Prefers the year in the tab name; if
+ * that's unreadable, infers it from `now` (before September → the year started
+ * last calendar year). Both the expiry and the Contacts year labels hang off
+ * this, so they can never disagree about which year is being synced.
  */
-export function membershipExpiry(masterTabName: string, now: Date = new Date()): string {
+export function schoolYearStart(masterTabName: string, now: Date = new Date()): number {
   const fromTab = schoolYearStartYear(masterTabName);
-  if (fromTab != null) return expiryForSchoolYear(fromTab);
+  if (fromTab != null) return fromTab;
 
   const beforeSchoolStart =
     now.getMonth() + 1 < SCHOOL_YEAR_START_MONTH ||
     (now.getMonth() + 1 === SCHOOL_YEAR_START_MONTH && now.getDate() < SCHOOL_YEAR_START_DAY);
-  const startYear = beforeSchoolStart ? now.getFullYear() - 1 : now.getFullYear();
-  return expiryForSchoolYear(startYear);
+  return beforeSchoolStart ? now.getFullYear() - 1 : now.getFullYear();
+}
+
+/**
+ * The school year written the way the org writes it in their Contacts labels:
+ * 2026 → "26/27". This is the org's existing convention ("26/27 Class 10 Paula"),
+ * not something we invented, so it must stay byte-identical to what they type.
+ */
+export function schoolYearLabel(startYear: number): string {
+  const two = (y: number) => String(y % 100).padStart(2, '0');
+  return `${two(startYear)}/${two(startYear + 1)}`;
+}
+
+/** The uniform expiry every member in this Master should receive. */
+export function membershipExpiry(masterTabName: string, now: Date = new Date()): string {
+  return expiryForSchoolYear(schoolYearStart(masterTabName, now));
 }

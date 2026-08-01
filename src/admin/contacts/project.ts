@@ -1,9 +1,10 @@
 /**
  * Gmail Contacts projection (GAS side).
  *
- * Projects current members into the master account's Contacts, under the
- * `CCB Members` umbrella label, tagged by class/teacher/level. Reuses the pure
- * planner (plan.ts) for the diff and the People API calls proven by the spike.
+ * Projects current members into the master account's Contacts, labelled the way
+ * the org already labels them: "26/27" and "26/27 Class 10 Paula" for this school
+ * year, plus cross-year "Level …" / "Teacher …". Reuses the pure planner (plan.ts)
+ * for the diff and the People API calls proven by the spike.
  *
  * Who "current members" are is decided by the same reconciliation as every other
  * tool — the uploaded Master + Register, the Borrowers sheet, and the account's
@@ -11,12 +12,15 @@
  * projected too, and this tool doesn't depend on the Borrowers write having run.
  *
  * Two entry points, mirroring the sync's preview-first rhythm:
- *   - previewContactProjection(...)  READ-ONLY: returns the create/update/remove plan.
- *   - applyContactProjection(...)    WRITES: executes the plan, guarded against
- *                                    empty/oversized diffs, scoped to `CCB ` labels.
+ *   - previewContactProjection(...)  READ-ONLY: returns the create/label plan.
+ *   - applyContactProjection(...)    WRITES: creates missing contacts and adds
+ *                                    missing labels. Nothing else.
  *
- * Only contacts inside the umbrella and only `CCB `-namespaced labels are ever
- * read or modified — personal contacts are untouched.
+ * The projection is additive: no contact is ever deleted, no label ever removed,
+ * and an existing contact's name/fields are never rewritten. Past years' labels
+ * are the org's alumni lists, so they're immutable history as far as this is
+ * concerned. The cost is that a wrong label has to be removed by hand in Gmail —
+ * the preview lists any it can spot (`staleYearLabels`).
  */
 
 // The People advanced service global is provided by GAS at runtime once enabled.
@@ -31,12 +35,11 @@ import { deriveClassInfo } from '../schedule/build';
 import { getBorrowerService } from '../../services/borrowers';
 import { readAllContacts } from './read';
 import { logAdmin } from '../log';
+import { schoolYearStart, schoolYearLabel } from '../expiry';
 import {
   membersForContact,
   buildDesiredContacts,
   diffContacts,
-  isManagedLabel,
-  UMBRELLA_LABEL,
   ContactPlan,
   DesiredContact,
   ExistingContact,
@@ -46,7 +49,14 @@ export interface ContactProjectionResult {
   success: boolean;
   error?: string;
   plan?: ContactPlan;
-  stats?: { desired: number; existingManaged: number; applied?: { created: number; updated: number; removed: number } };
+  stats?: {
+    desired: number;
+    /** How many contacts the account holds in total (the pool a member is matched against). */
+    existingContacts: number;
+    /** The school year these labels are scoped by, e.g. "26/27". */
+    year?: string;
+    applied?: { created: number; updated: number };
+  };
 }
 
 /** Picks the current-year Master tab (same tolerant selection as the sync). */
@@ -86,40 +96,49 @@ function ensureLabel(name: string, byName: Map<string, string>, byResource: Map<
   return created.resourceName;
 }
 
-/** Reads the contacts in the umbrella label, each with its `CCB `-namespaced labels. */
-function readManagedContacts(umbrellaResource: string, byResource: Map<string, string>): ExistingContact[] {
-  const group = People.ContactGroups.get(umbrellaResource, { maxMembers: 2000 });
-  const memberResourceNames: string[] = (group && group.memberResourceNames) || [];
+/**
+ * Reads EVERY contact in the account, each with the labels it carries.
+ *
+ * Not just "our" contacts: a member the admin already has in their address book
+ * must gain this year's labels rather than be created a second time, and that
+ * only works if we can find them by email/phone anywhere. Labels are read
+ * unfiltered because the projection only ever ADDS — we need to know what's
+ * already there so we don't re-add it, and we never remove any of it.
+ */
+function readAllContactsWithLabels(byResource: Map<string, string>): ExistingContact[] {
   const out: ExistingContact[] = [];
-  for (let i = 0; i < memberResourceNames.length; i += 200) {
-    const chunk = memberResourceNames.slice(i, i + 200);
-    const batch = People.People.getBatchGet({ resourceNames: chunk, personFields: 'names,emailAddresses,phoneNumbers,memberships' });
-    for (const resp of batch.responses || []) {
-      const person = resp.person;
-      if (!person) continue;
+  let pageToken: string | undefined;
+  do {
+    const resp = People.People.Connections.list('people/me', {
+      personFields: 'names,emailAddresses,phoneNumbers,memberships',
+      pageSize: 1000,
+      pageToken,
+    });
+    for (const person of resp.connections || []) {
       const email = ((person.emailAddresses && person.emailAddresses[0] && person.emailAddresses[0].value) || '').toLowerCase();
       const phone = (person.phoneNumbers && person.phoneNumbers[0] && person.phoneNumbers[0].value) || '';
-      if (!email && !phone) continue; // a managed contact keyed by neither can't be diffed
+      if (!email && !phone) continue; // keyed by neither — can't be matched to a member
       const displayName = (person.names && person.names[0] && person.names[0].displayName) || '(no name)';
       const labels: string[] = [];
       for (const mem of person.memberships || []) {
         const rn = mem.contactGroupMembership && mem.contactGroupMembership.contactGroupResourceName;
         const labelName = rn && byResource.get(rn);
-        if (labelName && isManagedLabel(labelName)) labels.push(labelName);
+        if (labelName) labels.push(labelName);
       }
       out.push({ email, phone, resourceName: person.resourceName, etag: person.etag, displayName, labels: labels.sort() });
     }
-  }
+    pageToken = resp.nextPageToken;
+  } while (pageToken);
   return out;
 }
 
-/** Parses uploads + Borrowers into the desired contact end-state and the current managed contacts. */
+/** Parses uploads + Borrowers into this year's desired labels and the account's existing contacts. */
 function computeProjection(
   masterB64: string,
   masterName: string,
   registerB64: string,
   registerName: string
-): { plan: ContactPlan; desired: DesiredContact[]; existing: ExistingContact[]; labels: ReturnType<typeof listLabels>; umbrella: string } {
+): { plan: ContactPlan; desired: DesiredContact[]; existing: ExistingContact[]; labels: ReturnType<typeof listLabels>; year: string } {
   let masterSheetId = '';
   let registerSheetId = '';
   try {
@@ -150,13 +169,15 @@ function computeProjection(
 
     // Teacher/level per class are derived from the Register (spreadsheet only).
     const classInfo = deriveClassInfo(masterParse.members, register);
-    const desired = buildDesiredContacts(membersForContact(ctx), classInfo);
+    // The school year the labels are scoped by — same source as the expiry, so a
+    // run can't write "26/27" labels alongside a 2026 expiry, or vice versa.
+    const year = schoolYearLabel(schoolYearStart(masterTab.getName()));
+    const desired = buildDesiredContacts(membersForContact(ctx), classInfo, year);
 
     const labels = listLabels();
-    const umbrella = ensureLabel(UMBRELLA_LABEL, labels.byName, labels.byResource);
-    const existing = readManagedContacts(umbrella, labels.byResource);
+    const existing = readAllContactsWithLabels(labels.byResource);
 
-    return { plan: diffContacts(desired, existing), desired, existing, labels, umbrella };
+    return { plan: diffContacts(desired, existing, year), desired, existing, labels, year };
   } finally {
     if (masterSheetId) trashSheet(masterSheetId);
     if (registerSheetId) trashSheet(registerSheetId);
@@ -172,12 +193,12 @@ function previewContactProjection(
 ): ContactProjectionResult {
   try {
     if (!masterB64 || !registerB64) return { success: false, error: 'Both the Master file and the Register file are required.' };
-    const { plan, desired, existing } = computeProjection(masterB64, masterName, registerB64, registerName);
+    const { plan, desired, existing, year } = computeProjection(masterB64, masterName, registerB64, registerName);
     logAdmin(
-      `Previewed contacts projection: ${desired.length} current members · ` +
-        `${plan.toCreate.length} create / ${plan.toUpdate.length} update / ${plan.toRemove.length} remove`
+      `Previewed contacts projection for ${year}: ${desired.length} current members · ` +
+        `${plan.toCreate.length} create / ${plan.toUpdate.length} label / ${plan.unchangedCount} already labelled`
     );
-    return { success: true, plan, stats: { desired: desired.length, existingManaged: existing.length } };
+    return { success: true, plan, stats: { desired: desired.length, existingContacts: existing.length, year } };
   } catch (e) {
     return { success: false, error: String(e) };
   }
@@ -196,23 +217,18 @@ function applyContactProjection(
 ): ContactProjectionResult {
   try {
     if (!masterB64 || !registerB64) return { success: false, error: 'Both the Master file and the Register file are required.' };
-    const { plan, desired, existing, labels } = computeProjection(masterB64, masterName, registerB64, registerName);
+    const { plan, desired, existing, labels, year } = computeProjection(masterB64, masterName, registerB64, registerName);
 
-    // Safety guards — refuse to write on a diff that looks like a bad upload.
+    // The one guard still worth having: an upload that resolved to nobody would
+    // otherwise be a silent no-op. Nothing here can delete, so there's no
+    // oversized-removal case left to defend against.
     if (desired.length === 0) {
       return { success: false, error: 'No current members resolved from the uploads — refusing to modify Contacts.' };
-    }
-    if (existing.length >= 5 && plan.toRemove.length > existing.length * 0.5) {
-      return {
-        success: false,
-        error: `Refusing to apply: the plan would remove ${plan.toRemove.length} of ${existing.length} managed contacts (over half). Re-check the uploaded files, then retry.`,
-      };
     }
 
     const labelRes = (name: string) => ensureLabel(name, labels.byName, labels.byResource);
     let created = 0;
     let updated = 0;
-    let removed = 0;
 
     for (const c of plan.toCreate) {
       // Route the detail to the right People field: email vs phone.
@@ -228,33 +244,21 @@ function applyContactProjection(
       created++;
     }
 
+    // Labels only — the contact's name and every other field are left as the
+    // admin has them, and no label is ever taken away.
     for (const u of plan.toUpdate) {
-      if (u.nameChanged) {
-        People.People.updateContact(
-          { etag: u.etag, names: [{ givenName: u.toGiven, familyName: u.toFamily }] },
-          u.resourceName,
-          { updatePersonFields: 'names' }
-        );
-      }
       for (const label of u.labelsToAdd) {
         People.ContactGroups.Members.modify({ resourceNamesToAdd: [u.resourceName] }, labelRes(label));
-      }
-      for (const label of u.labelsToRemove) {
-        People.ContactGroups.Members.modify({ resourceNamesToRemove: [u.resourceName] }, labelRes(label));
       }
       updated++;
     }
 
-    for (const r of plan.toRemove) {
-      People.People.deleteContact(r.resourceName);
-      removed++;
-    }
-
     logAdmin(
-      `Contacts projection applied: +${created} created, ~${updated} updated, -${removed} removed (${desired.length} current members)`
+      `Contacts projection applied for ${year}: +${created} created, ~${updated} labelled ` +
+        `(${desired.length} current members, ${plan.staleYearLabels.length} stale ${year} label(s) left for the admin)`
     );
 
-    return { success: true, plan, stats: { desired: desired.length, existingManaged: existing.length, applied: { created, updated, removed } } };
+    return { success: true, plan, stats: { desired: desired.length, existingContacts: existing.length, year, applied: { created, updated } } };
   } catch (e) {
     return { success: false, error: String(e) };
   }

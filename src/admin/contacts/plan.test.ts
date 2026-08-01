@@ -3,8 +3,7 @@ import {
   membersForContact,
   buildDesiredContacts,
   diffContacts,
-  isManagedLabel,
-  UMBRELLA_LABEL,
+  isYearLabel,
   DesiredContact,
   ExistingContact,
   MemberForContact,
@@ -28,20 +27,19 @@ function member(over: Partial<MemberForContact> = {}): MemberForContact {
   return { id: 'B1', name: 'Dupont, Marie', email: 'marie@ex.fr', classNumbers: ['1'], ...over };
 }
 function existing(email: string, over: Partial<ExistingContact> = {}): ExistingContact {
-  return { email, phone: '', resourceName: 'people/c1', etag: 'e', displayName: 'Dupont, Marie', labels: [UMBRELLA_LABEL, 'Class 1'], ...over };
+  return { email, phone: '', resourceName: 'people/c1', etag: 'e', displayName: 'Dupont, Marie', labels: [], ...over };
 }
 
-describe('isManagedLabel', () => {
-  it('matches the umbrella and our class/teacher/level labels', () => {
-    expect(isManagedLabel(UMBRELLA_LABEL)).toBe(true);
-    expect(isManagedLabel('Class 8a')).toBe(true);
-    expect(isManagedLabel('Teacher Hannah')).toBe(true);
-    expect(isManagedLabel('Level Intermediate')).toBe(true);
+describe('isYearLabel', () => {
+  it('matches the year label and this year\'s class labels', () => {
+    expect(isYearLabel('26/27', '26/27')).toBe(true);
+    expect(isYearLabel('26/27 Class 10 Paula', '26/27')).toBe(true);
   });
-  it('does not match unrelated personal labels', () => {
-    expect(isManagedLabel('Family')).toBe(false);
-    expect(isManagedLabel('Classmates')).toBe(false); // "Class" without a trailing " X"
-    expect(isManagedLabel('Level')).toBe(false);
+  it('does not match another year, a cross-year label, or a personal one', () => {
+    expect(isYearLabel('25/26 Class 10 Paula', '26/27')).toBe(false);
+    expect(isYearLabel('Level Intermediate', '26/27')).toBe(false);
+    expect(isYearLabel('Teacher Paula', '26/27')).toBe(false);
+    expect(isYearLabel('Family', '26/27')).toBe(false);
   });
 });
 
@@ -148,87 +146,144 @@ describe('membersForContact', () => {
 });
 
 describe('buildDesiredContacts', () => {
-  it('labels a member with umbrella + class + teacher + level', () => {
-    const info = new Map([['1', { teacher: 'Hannah', level: 'Intermediate' }]]);
-    const [d] = buildDesiredContacts([member()], info);
+  const info = new Map([['1', { teacher: 'Hannah', level: 'Intermediate' }]]);
+
+  it("follows the org's own label pattern: year, year-class-teacher, level, teacher", () => {
+    const [d] = buildDesiredContacts([member()], info, '26/27');
     expect(d.email).toBe('marie@ex.fr');
-    expect(d.labels).toEqual(['CCB Members', 'Class 1', 'Level Intermediate', 'Teacher Hannah']);
+    expect(d.labels).toEqual(['26/27', '26/27 Class 1 Hannah', 'Level Intermediate', 'Teacher Hannah']);
   });
 
-  it('omits teacher/level labels when the class info is unknown', () => {
-    const [d] = buildDesiredContacts([member({ classNumbers: ['99'] })], new Map());
-    expect(d.labels).toEqual(['CCB Members', 'Class 99']);
+  it('matches the example label they already use by hand', () => {
+    const paula = new Map([['10', { teacher: 'Paula', level: 'U Intermediate (B2+)' }]]);
+    const [d] = buildDesiredContacts([member({ classNumbers: ['10'] })], paula, '26/27');
+    expect(d.labels).toContain('26/27 Class 10 Paula');
+  });
+
+  it('drops the teacher from the class label when the class info is unknown', () => {
+    const [d] = buildDesiredContacts([member({ classNumbers: ['99'] })], new Map(), '26/27');
+    expect(d.labels).toEqual(['26/27', '26/27 Class 99']);
+  });
+
+  it('gives a member in two classes a label for each, plus the one year label', () => {
+    const two = new Map([['11', { teacher: 'Hannah', level: 'Advanced (C1)' }], ['12', { teacher: 'Ben', level: 'Intermediate' }]]);
+    const [d] = buildDesiredContacts([member({ classNumbers: ['11 & 12'] })], two, '26/27');
+    expect(d.labels).toEqual([
+      '26/27',
+      '26/27 Class 11 Hannah',
+      '26/27 Class 12 Ben',
+      'Level Advanced (C1)',
+      'Level Intermediate',
+      'Teacher Ben',
+      'Teacher Hannah',
+    ]);
   });
 
   it('expands the "U Intermediate" shorthand to "Upper Intermediate" in the label', () => {
-    const info = new Map([['1', { teacher: 'Hannah', level: 'U Intermediate (B2+)' }]]);
-    const [d] = buildDesiredContacts([member()], info);
+    const u = new Map([['1', { teacher: 'Hannah', level: 'U Intermediate (B2+)' }]]);
+    const [d] = buildDesiredContacts([member()], u, '26/27');
     expect(d.labels).toContain('Level Upper Intermediate (B2+)');
   });
 });
 
-describe('diffContacts', () => {
+describe('diffContacts — additive only', () => {
+  const YEAR = '26/27';
   const desired = (over: Partial<DesiredContact> = {}): DesiredContact => ({
-    email: 'marie@ex.fr', phone: '', family: 'Dupont', given: 'Marie', labels: [UMBRELLA_LABEL, 'Class 1'], ...over,
+    email: 'marie@ex.fr', phone: '', family: 'Dupont', given: 'Marie', labels: [YEAR, '26/27 Class 1 Hannah'], ...over,
   });
 
   it('creates a member not yet in Contacts', () => {
-    const plan = diffContacts([desired()], []);
+    const plan = diffContacts([desired()], [], YEAR);
     expect(plan.toCreate).toHaveLength(1);
     expect(plan.toCreate[0].email).toBe('marie@ex.fr');
     expect(plan.toCreate[0].contact).toBe('marie@ex.fr');
   });
 
   it('creates a phone-only member with the phone in the phone field, keyed by phone', () => {
-    const plan = diffContacts([desired({ email: '', phone: '06 48 41 34 70' })], []);
+    const plan = diffContacts([desired({ email: '', phone: '06 48 41 34 70' })], [], YEAR);
     expect(plan.toCreate).toHaveLength(1);
     expect(plan.toCreate[0].email).toBe('');
     expect(plan.toCreate[0].phone).toBe('06 48 41 34 70');
-    expect(plan.toCreate[0].contact).toBe('06 48 41 34 70');
   });
 
   it('matches a phone-only member to their existing contact (no duplicate) despite formatting', () => {
     const plan = diffContacts(
-      [desired({ email: '', phone: '06 48 41 34 70' })],
-      [existing('', { phone: '+33 6 48 41 34 70' })]
+      [desired({ email: '', phone: '06 48 41 34 70', labels: [] })],
+      [existing('', { phone: '+33 6 48 41 34 70' })],
+      YEAR
     );
     expect(plan.toCreate).toHaveLength(0);
     expect(plan.unchangedCount).toBe(1);
-  });
-
-  it('removes a managed contact who is no longer a member', () => {
-    const plan = diffContacts([], [existing('gone@ex.fr')]);
-    expect(plan.toRemove.map((r) => r.contact)).toEqual(['gone@ex.fr']);
-  });
-
-  it('leaves an identical contact unchanged', () => {
-    const plan = diffContacts([desired()], [existing('marie@ex.fr')]);
-    expect(plan.toUpdate).toHaveLength(0);
-    expect(plan.toRemove).toHaveLength(0);
-    expect(plan.unchangedCount).toBe(1);
-  });
-
-  it('computes only the label delta (add new class, drop stale one)', () => {
-    const plan = diffContacts(
-      [desired({ labels: [UMBRELLA_LABEL, 'Class 2', 'Teacher Ann'] })],
-      [existing('marie@ex.fr', { labels: [UMBRELLA_LABEL, 'Class 1'] })]
-    );
-    expect(plan.toUpdate).toHaveLength(1);
-    expect(plan.toUpdate[0].labelsToAdd).toEqual(['Class 2', 'Teacher Ann']);
-    expect(plan.toUpdate[0].labelsToRemove).toEqual(['Class 1']);
-    expect(plan.toUpdate[0].nameChanged).toBe(false);
-  });
-
-  it('flags a name change but not a mere reordering of the same name', () => {
-    const changed = diffContacts([desired({ family: 'Dupont-Martin' })], [existing('marie@ex.fr')]);
-    expect(changed.toUpdate[0].nameChanged).toBe(true);
-    const reordered = diffContacts([desired()], [existing('marie@ex.fr', { displayName: 'Marie Dupont' })]);
-    expect(reordered.toUpdate).toHaveLength(0); // same tokens → not a change
   });
 
   it('matches emails case-insensitively', () => {
-    const plan = diffContacts([desired({ email: 'Marie@Ex.FR' })], [existing('marie@ex.fr')]);
+    const plan = diffContacts([desired({ email: 'Marie@Ex.FR', labels: [] })], [existing('marie@ex.fr')], YEAR);
     expect(plan.toCreate).toHaveLength(0);
     expect(plan.unchangedCount).toBe(1);
+  });
+
+  // The point of the whole scheme: a contact the admin already has just gains
+  // this year's labels. It is not duplicated, renamed, or stripped of anything.
+  it('adds only the missing labels to a contact that already exists', () => {
+    const plan = diffContacts(
+      [desired()],
+      [existing('marie@ex.fr', { labels: ['25/26', '25/26 Class 1 Hannah', 'Friends', '26/27'] })],
+      YEAR
+    );
+    expect(plan.toUpdate).toHaveLength(1);
+    expect(plan.toUpdate[0].labelsToAdd).toEqual(['26/27 Class 1 Hannah']);
+  });
+
+  it('never removes a label — last year\'s class and personal labels survive', () => {
+    const plan = diffContacts(
+      [desired()],
+      [existing('marie@ex.fr', { labels: ['25/26 Class 4 Paula', 'Family', 'CCB Members'] })],
+      YEAR
+    );
+    expect(plan.toUpdate[0].labelsToAdd).toEqual(['26/27', '26/27 Class 1 Hannah']);
+    // There is no vocabulary for taking a label away, or for deleting a contact.
+    expect(Object.keys(plan.toUpdate[0])).not.toContain('labelsToRemove');
+    expect(plan).not.toHaveProperty('toRemove');
+  });
+
+  it('leaves a fully-labelled contact alone', () => {
+    const plan = diffContacts([desired()], [existing('marie@ex.fr', { labels: [YEAR, '26/27 Class 1 Hannah'] })], YEAR);
+    expect(plan.toUpdate).toHaveLength(0);
+    expect(plan.unchangedCount).toBe(1);
+  });
+
+  // Renaming someone's address book entry is not ours to do — it's reported so
+  // the admin can decide, and left alone either way.
+  it('reports a differing name without changing it', () => {
+    const plan = diffContacts([desired({ family: 'Dupont-Martin' })], [existing('marie@ex.fr')], YEAR);
+    expect(plan.toUpdate[0].nameDiffers).toBe(true);
+    expect(plan.toUpdate[0].existingName).toBe('Dupont, Marie');
+    expect(plan.toUpdate[0].memberName).toBe('Dupont-Martin, Marie');
+  });
+
+  it('does not call a mere name reordering a difference', () => {
+    const plan = diffContacts([desired()], [existing('marie@ex.fr', { displayName: 'Marie Dupont' })], YEAR);
+    expect(plan.toUpdate[0].nameDiffers).toBe(false);
+  });
+
+  // An alumnus is a contact who simply isn't in this year's cohort. Nothing
+  // happens to them at all — that's what makes them still messageable.
+  it('leaves a past member entirely alone', () => {
+    const plan = diffContacts([], [existing('alum@ex.fr', { labels: ['25/26', '25/26 Class 4 Paula'] })], YEAR);
+    expect(plan.toCreate).toHaveLength(0);
+    expect(plan.toUpdate).toHaveLength(0);
+    expect(plan.staleYearLabels).toHaveLength(0);
+  });
+
+  it('reports (but does not touch) a contact still carrying THIS year\'s labels', () => {
+    const plan = diffContacts(
+      [],
+      [existing('dropped@ex.fr', { displayName: 'Gone, Greg', labels: ['25/26', '26/27', '26/27 Class 1 Hannah'] })],
+      YEAR
+    );
+    expect(plan.staleYearLabels).toEqual([
+      { contact: 'dropped@ex.fr', displayName: 'Gone, Greg', labels: ['26/27', '26/27 Class 1 Hannah'] },
+    ]);
+    expect(plan.toUpdate).toHaveLength(0);
   });
 });

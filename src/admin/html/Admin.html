@@ -91,17 +91,20 @@
     <div class="card">
       <h2 style="font-size:1.1rem;margin-top:0">Gmail Contacts projection</h2>
       <p class="muted">
-        Projects current members into this account's Contacts under the
-        <strong>CCB Members</strong> label, tagged by class / teacher / level so
-        you can email a whole class from Gmail. Who counts as a current member
-        comes from the same reconciliation as everything else — the uploaded
-        Master and Register, the Borrowers sheet and your Contacts — so someone
-        enrolled in the Master but not yet in Borrowers is projected too, on the
-        email or phone found for them. You don't have to run the Borrowers update
-        first, and running it doesn't change this projection. Preview shows the
-        planned create / update / remove; only <strong>CCB</strong> labels and
-        contacts in that umbrella are ever touched. Apply writes to Contacts (not
-        the spreadsheets) and is guarded against oversized diffs.
+        Labels this year's members in this account's Contacts, following the
+        pattern you already use: <strong>26/27</strong> for everyone in the year,
+        <strong>26/27 Class 10 Paula</strong> per class, plus
+        <strong>Level …</strong> and <strong>Teacher …</strong> which span all
+        years. So you can mail the whole school, one class, or — because past
+        years' labels are never touched — the alumni of any earlier year.
+        <br><br>
+        <strong>Nothing is ever removed.</strong> No contact is deleted, no label
+        taken away, and a contact you already have keeps its name and fields — it
+        simply gains the labels it's missing, matched by email or phone across
+        your whole address book so nobody is duplicated. Who counts as a current
+        member comes from the same reconciliation as everything else (the uploaded
+        Master and Register, the Borrowers sheet, your Contacts), so a member not
+        yet in Borrowers is included and you needn't run that tool first.
       </p>
       <button id="conPreviewBtn" onclick="runContacts(false)" disabled>Preview</button>
       <button id="conApplyBtn" onclick="runContacts(true)" disabled style="background:#b06a00;border-color:#b06a00">Apply to Contacts</button>
@@ -516,26 +519,36 @@
           return head + '<div class="scrolllist"><table class="plantable"><thead><tr>' + ths + '</tr></thead><tbody>' +
             arr.map(rowFn).join('') + '</tbody></table></div>';
         };
+        var year = (stats && stats.year) || '';
         var applied = stats && stats.applied
-          ? '<div class="gate ok">✓ Applied: ' + stats.applied.created + ' created · ' + stats.applied.updated + ' updated · ' + stats.applied.removed + ' removed.</div>'
+          ? '<div class="gate ok">✓ Applied: ' + stats.applied.created + ' contact(s) created · ' +
+              stats.applied.updated + ' given missing labels. Nothing was removed.</div>'
           : '';
         out.innerHTML = applied +
-          '<div class="muted">' + stats.desired + ' current members · ' + stats.existingManaged + ' already in the CCB Members label · ' + plan.unchangedCount + ' unchanged.</div>' +
-          section('Create', '', plan.toCreate, ['Name', 'Email / phone', 'Labels'], function (c) {
+          '<div class="muted">' + stats.desired + ' current members · labels for <strong>' + escapeHtml(year) + '</strong> · ' +
+            stats.existingContacts + ' contacts in the account · ' + plan.unchangedCount + ' already fully labelled.</div>' +
+          '<div class="muted">Additive only: no contact is deleted, no label removed, and existing names are left as they are — past years stay intact.</div>' +
+          section('Create — new contacts', '', plan.toCreate, ['Name', 'Email / phone', 'Labels'], function (c) {
             return '<tr><td class="nowrap">' + escapeHtml(c.family + ', ' + c.given) + '</td><td class="nowrap">' +
               escapeHtml(c.contact) + '</td><td class="labels">' + escapeHtml(c.labels.join(', ')) + '</td></tr>';
           }) +
-          section('Update', '', plan.toUpdate, ['Email / phone', 'Change'], function (u) {
-            var bits = [];
-            if (u.nameChanged) bits.push('name→' + escapeHtml(u.toFamily + ', ' + u.toGiven));
-            if (u.labelsToAdd.length) bits.push('+[' + escapeHtml(u.labelsToAdd.join(', ')) + ']');
-            if (u.labelsToRemove.length) bits.push('−[' + escapeHtml(u.labelsToRemove.join(', ')) + ']');
-            return '<tr><td class="nowrap">' + escapeHtml(u.contact) + '</td><td class="labels">' + bits.join(' ') + '</td></tr>';
+          section('Add labels — contacts you already have', '', plan.toUpdate, ['Filed as', 'Email / phone', 'Labels to add'], function (u) {
+            // A differing name is shown, not fixed — the admin's filing wins.
+            var name = escapeHtml(u.existingName) + (u.nameDiffers
+              ? ' <span style="color:#b06a00">(membership says "' + escapeHtml(u.memberName) + '" — left as is)</span>'
+              : '');
+            return '<tr><td>' + name + '</td><td class="nowrap">' + escapeHtml(u.contact) +
+              '</td><td class="labels">+ ' + escapeHtml(u.labelsToAdd.join(', ')) + '</td></tr>';
           }) +
-          section('Remove — deletes the contact', '#b00020', plan.toRemove, ['Name', 'Email / phone'], function (r) {
-            return '<tr><td class="nowrap">' + escapeHtml(r.displayName) + '</td><td class="nowrap">' + escapeHtml(r.contact) + '</td></tr>';
-          }) +
-          (!plan.toCreate.length && !plan.toUpdate.length && !plan.toRemove.length ? '<p class="muted">Contacts already match — nothing to do.</p>' : '');
+          section('Carrying ' + escapeHtml(year) + ' labels but not in this year\'s cohort — not touched', '#b06a00',
+            plan.staleYearLabels, ['Name', 'Email / phone', 'Labels held'], function (s) {
+              return '<tr><td class="nowrap">' + escapeHtml(s.displayName) + '</td><td class="nowrap">' + escapeHtml(s.contact) +
+                '</td><td class="labels">' + escapeHtml(s.labels.join(', ')) + '</td></tr>';
+            }) +
+          (plan.staleYearLabels.length
+            ? '<p class="muted">Those are usually someone pulled from the Master after an earlier run. Remove the label in Gmail if it\'s wrong — this tool never will.</p>'
+            : '') +
+          (!plan.toCreate.length && !plan.toUpdate.length ? '<p class="muted">Every current member is already in Contacts with this year\'s labels — nothing to do.</p>' : '');
       }
 
       function runContacts(apply) {
@@ -574,7 +587,7 @@
               renderContactPlan(res);
               // Enable Apply only after a successful preview that has changes, and
               // only when detection came back free of discrepancies.
-              var hasChanges = res.plan.toCreate.length || res.plan.toUpdate.length || res.plan.toRemove.length;
+              var hasChanges = res.plan.toCreate.length || res.plan.toUpdate.length;
               applyBtn.disabled = apply || !conApplyAllowed || !hasChanges;
             })
             .withFailureHandler(function (err) {
