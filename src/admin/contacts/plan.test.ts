@@ -25,7 +25,7 @@ function input(over: Partial<DetectorInput>): DetectorInput {
   return { master: [], register: [], app: [], roster: { validClassIds: [] }, ...over };
 }
 function member(over: Partial<MemberForContact> = {}): MemberForContact {
-  return { appId: 'B1', name: 'Dupont, Marie', email: 'marie@ex.fr', classNumbers: ['1'], ...over };
+  return { id: 'B1', name: 'Dupont, Marie', email: 'marie@ex.fr', classNumbers: ['1'], ...over };
 }
 function existing(email: string, over: Partial<ExistingContact> = {}): ExistingContact {
   return { email, phone: '', resourceName: 'people/c1', etag: 'e', displayName: 'Dupont, Marie', labels: [UMBRELLA_LABEL, 'Class 1'], ...over };
@@ -64,7 +64,7 @@ describe('membersForContact', () => {
     }));
     const members = membersForContact(ctx);
     expect(members).toHaveLength(1);
-    expect(members[0].appId).toBe('B1');
+    expect(members[0].id).toBe('B1');
     expect(members[0].classNumbers.sort()).toEqual(['8a', '8b']);
   });
 
@@ -85,6 +85,65 @@ describe('membersForContact', () => {
     expect(members).toHaveLength(1);
     expect(members[0].email).toBe('');
     expect(members[0].phone).toBe('06 48 41 34 70');
+  });
+
+  // The Master says who is a member this year, so the projection can't be limited
+  // to whoever the Borrowers sheet happens to hold already.
+  it('includes a Master member the app does not hold yet, on their Register email', () => {
+    const ctx = reconcile(input({
+      master: [m('New, Guy', { classNumber: '2' })],
+      register: [reg('New, Guy', 'guy@ex.fr', { classId: '2' })],
+      app: [],
+    }));
+    const members = membersForContact(ctx);
+    expect(members).toHaveLength(1);
+    expect(members[0]).toMatchObject({ name: 'New, Guy', email: 'guy@ex.fr', classNumbers: ['2'] });
+    expect(members[0].id).toBe('master:guy new');
+  });
+
+  it('includes a not-yet-in-app member found only by phone', () => {
+    const ctx = reconcile(input({
+      master: [m('Phoney, Pat')],
+      register: [reg('Phoney, Pat', '', { phone: '06 48 41 34 70' })],
+    }));
+    expect(membersForContact(ctx)[0]).toMatchObject({ email: '', phone: '06 48 41 34 70' });
+  });
+
+  it('still drops a Master member with no contact detail anywhere', () => {
+    const ctx = reconcile(input({ master: [m('Lonely, Len')] }));
+    expect(membersForContact(ctx)).toHaveLength(0);
+  });
+
+  // A contact is keyed by its address, so a newcomer resolving to an address an
+  // app member already holds must not quietly take it over. (The detector blocks
+  // this case, so it can only appear in a preview of an unclean run.)
+  it('never lets a newcomer displace the app member holding that email', () => {
+    const ctx = reconcile(input({
+      master: [m('Existing, Ed'), m('CALLENS, M-Christine')],
+      app: [app('B1', 'Existing, Ed', 'ed@ex.fr'), app('B2', 'Callens, Marie-Christine', 'shared@ex.fr')],
+      contacts: [{ rawName: 'CALLENS, M-Christine', email: 'shared@ex.fr' }],
+    }));
+    // The app record holding that address isn't even a current member here, which
+    // is precisely why the newcomer must not inherit its contact.
+    expect(membersForContact(ctx).filter((x) => x.email === 'shared@ex.fr')).toHaveLength(0);
+  });
+
+  /**
+   * The property that makes projecting from the reconciliation (rather than from
+   * Borrowers) safe: running the Borrowers write first must not change the
+   * outcome. The pre-write projection uses the same name and the same contact
+   * detail the write would create the record with, so both orders converge.
+   */
+  it('projects the same contact before and after the Borrowers write', () => {
+    const master = [m('New, Guy', { classNumber: '2' })];
+    const register = [reg('New, Guy', 'guy@ex.fr', { classId: '2' })];
+
+    const before = membersForContact(reconcile(input({ master, register, app: [] })));
+    // What the Borrowers spoke writes: the Master name verbatim + that email.
+    const after = membersForContact(reconcile(input({ master, register, app: [app('B9', 'New, Guy', 'guy@ex.fr')] })));
+
+    const shape = (list: MemberForContact[]) => list.map(({ id, ...rest }) => rest);
+    expect(shape(before)).toEqual(shape(after));
   });
 });
 

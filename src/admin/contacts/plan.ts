@@ -16,7 +16,7 @@
  * reads/writes Contacts and maps label names ↔ resourceNames.
  */
 
-import { ReconContext } from '../detector';
+import { ReconContext, resolveNewMembers } from '../detector';
 import { isEmailShaped, emailKey, isPhoneShaped, phoneKey, nameKey } from '../detector/normalize';
 import { splitClassIds } from '../classid';
 import { normalizeLevel } from '../level';
@@ -48,9 +48,14 @@ export function isManagedLabel(name: string): boolean {
   return name === UMBRELLA_LABEL || MANAGED_LABEL_RE.test(name);
 }
 
-/** A current member reduced to what a contact needs (one per app record; siblings already merged). */
+/**
+ * A current member reduced to what a contact needs — one per PERSON as the
+ * reconciliation sees them: siblings merged onto their parent's record, and
+ * Master members not yet in the app included in their own right.
+ */
 export interface MemberForContact {
-  appId: string;
+  /** The app record id, or `master:<name key>` for someone the app doesn't hold yet. */
+  id: string;
   name: string;
   email: string;
   /** Phone, used as the contact detail when the member has no email ('' if none). */
@@ -123,28 +128,63 @@ export function splitName(raw: string): { family: string; given: string } {
 }
 
 /**
- * Reduces the reconciliation context to the current members that should be
- * contacts: one per app record (siblings collapse), carrying every class number
- * their Master rows list. Members with no usable email are dropped (a contact
- * needs an email; the detector flags those separately).
+ * Reduces the reconciliation context to the people who should be contacts.
+ *
+ * The projection is built from the SAME reconciliation every other tool uses —
+ * this year's Master + Register, the app's Borrowers, and the account's Contacts —
+ * not from the Borrowers sheet alone. That matters because the Master is what
+ * says who is a member this year: a person enrolled in the Master but not yet in
+ * Borrowers is a current member, and leaving them out would silently project a
+ * partial cohort whenever Contacts ran before the Borrowers write.
+ *
+ * So two sources of people, in one pass:
+ *   - each linked app record (siblings collapse onto their parent's record), and
+ *   - each Master member with no app record, contacted on the email/phone
+ *     `resolveNewMembers` finds — the very detail the Borrowers tool would
+ *     create them with, so running the tools in either order gives the same
+ *     contact.
+ *
+ * Everyone carries every class number their Master rows list. Anyone with no
+ * reachable detail at all is dropped (a contact needs one); the detector blocks
+ * on those separately, so a clean detection has none.
  */
 export function membersForContact(ctx: ReconContext): MemberForContact[] {
-  const byApp = new Map<string, { appId: string; name: string; email: string; phone: string; classes: Set<string> }>();
+  const byPerson = new Map<string, { id: string; name: string; email: string; phone: string; classes: Set<string> }>();
+  const upsert = (id: string, name: string, email: string, phone: string, classNumber: string) => {
+    const entry =
+      byPerson.get(id) || byPerson.set(id, { id, name, email, phone, classes: new Set() }).get(id)!;
+    const cls = (classNumber || '').trim();
+    if (cls) entry.classes.add(cls);
+  };
+
   for (const link of ctx.links) {
     if (!link.app) continue;
-    const entry =
-      byApp.get(link.app.id) ||
-      byApp
-        .set(link.app.id, { appId: link.app.id, name: link.app.rawName, email: link.app.email, phone: link.app.phone || '', classes: new Set() })
-        .get(link.app.id)!;
-    const cls = (link.master.classNumber || '').trim();
-    if (cls) entry.classes.add(cls);
+    upsert(link.app.id, link.app.rawName, link.app.email, link.app.phone || '', link.master.classNumber);
   }
-  // A contact needs SOME reachable detail — an email or a phone. Members with
-  // neither are dropped (the detector flags them separately).
-  return [...byApp.values()]
+
+  // Master members the app doesn't hold yet — real members of this year's cohort.
+  // A contact is keyed by its email/phone, so someone whose only detail is already
+  // spoken for would overwrite the person holding it. The app record wins and the
+  // newcomer is left out rather than silently replacing them; the detector blocks
+  // on exactly this (shared-new-contact / new-email-in-app), so a clean detection
+  // never reaches here with a clash.
+  const taken = new Set([...byPerson.values()].map((p) => contactId(p.email, p.phone)).filter(Boolean));
+  for (const { master, hit } of resolveNewMembers(ctx)) {
+    if (!hit) continue;
+    const email = hit.kind === 'email' ? hit.value : '';
+    const phone = hit.kind === 'phone' ? hit.value : '';
+    const key = contactId(email, phone);
+    if (!key || taken.has(key)) continue;
+    // An address the app already records against SOMEONE (current or lapsed) isn't
+    // free to use: projecting this person onto it would rename that contact.
+    if (email && ctx.appByEmail.has(emailKey(email))) continue;
+    taken.add(key);
+    upsert(`master:${nameKey(master.rawName)}`, master.rawName, email, phone, master.classNumber);
+  }
+
+  return [...byPerson.values()]
     .filter((m) => isEmailShaped(m.email) || isPhoneShaped(m.phone))
-    .map((m) => ({ appId: m.appId, name: m.name, email: m.email, phone: m.phone, classNumbers: [...m.classes] }));
+    .map((m) => ({ id: m.id, name: m.name, email: m.email, phone: m.phone, classNumbers: [...m.classes] }));
 }
 
 /** Builds the desired contact end-state, deriving teacher/level labels from class info. */

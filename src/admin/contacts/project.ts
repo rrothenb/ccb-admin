@@ -5,6 +5,11 @@
  * `CCB Members` umbrella label, tagged by class/teacher/level. Reuses the pure
  * planner (plan.ts) for the diff and the People API calls proven by the spike.
  *
+ * Who "current members" are is decided by the same reconciliation as every other
+ * tool — the uploaded Master + Register, the Borrowers sheet, and the account's
+ * Contacts — so a member enrolled in the Master but not yet in Borrowers is
+ * projected too, and this tool doesn't depend on the Borrowers write having run.
+ *
  * Two entry points, mirroring the sync's preview-first rhythm:
  *   - previewContactProjection(...)  READ-ONLY: returns the create/update/remove plan.
  *   - applyContactProjection(...)    WRITES: executes the plan, guarded against
@@ -24,6 +29,7 @@ import { parseRegisterTabs } from '../ingest/register';
 import { uploadedXlsxToSheetId, trashSheet, sheetToStringGrid } from '../ingest/xlsx';
 import { deriveClassInfo } from '../schedule/build';
 import { getBorrowerService } from '../../services/borrowers';
+import { readAllContacts } from './read';
 import { logAdmin } from '../log';
 import {
   membersForContact,
@@ -126,8 +132,20 @@ function computeProjection(
     const register = parseRegisterTabs(SpreadsheetApp.openById(registerSheetId).getSheets().map((s) => sheetToStringGrid(s)));
 
     const app = loadAppMembers();
+
+    // The account's Contacts, read as a source (not just as the umbrella to diff
+    // against): they're one of the places a not-yet-in-app member's email comes
+    // from, so without them this projection could resolve fewer people than the
+    // detection run did. Never fatal.
+    let contacts: ReturnType<typeof readAllContacts> = [];
+    try {
+      contacts = readAllContacts();
+    } catch (e) {
+      logAdmin(`Contacts read skipped while planning the projection (continuing without): ${e}`);
+    }
+
     const classIds = Array.from(new Set(register.map((r) => r.classId).filter(Boolean)));
-    const input: DetectorInput = { master: masterParse.members, register, app, roster: { validClassIds: classIds } };
+    const input: DetectorInput = { master: masterParse.members, register, app, roster: { validClassIds: classIds }, contacts };
     const ctx = reconcile(input);
 
     // Teacher/level per class are derived from the Register (spreadsheet only).

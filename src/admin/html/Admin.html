@@ -93,10 +93,15 @@
       <p class="muted">
         Projects current members into this account's Contacts under the
         <strong>CCB Members</strong> label, tagged by class / teacher / level so
-        you can email a whole class from Gmail. Preview shows the planned
-        create / update / remove; only <strong>CCB</strong> labels and contacts in
-        that umbrella are ever touched. Apply writes to Contacts (not the
-        spreadsheets) and is guarded against oversized diffs.
+        you can email a whole class from Gmail. Who counts as a current member
+        comes from the same reconciliation as everything else — the uploaded
+        Master and Register, the Borrowers sheet and your Contacts — so someone
+        enrolled in the Master but not yet in Borrowers is projected too, on the
+        email or phone found for them. You don't have to run the Borrowers update
+        first, and running it doesn't change this projection. Preview shows the
+        planned create / update / remove; only <strong>CCB</strong> labels and
+        contacts in that umbrella are ever touched. Apply writes to Contacts (not
+        the spreadsheets) and is guarded against oversized diffs.
       </p>
       <button id="conPreviewBtn" onclick="runContacts(false)" disabled>Preview</button>
       <button id="conApplyBtn" onclick="runContacts(true)" disabled style="background:#b06a00;border-color:#b06a00">Apply to Contacts</button>
