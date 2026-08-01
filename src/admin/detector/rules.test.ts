@@ -375,6 +375,56 @@ describe('email checks (current members only)', () => {
   });
 });
 
+// These two are the conditions that make a Borrowers CREATION impossible, so they
+// block — the whole point being that anything stopping a write says so out loud.
+describe('new-member contact clashes', () => {
+  it('BLOCKS when two new members resolve to the same email', () => {
+    const f = run({
+      master: [master('Kid, Alban'), master('Kid, Maxence')],
+      register: [reg('Kid, Alban', 'parent@ex.fr'), reg('Kid, Maxence', 'parent@ex.fr')],
+    }).find((x) => x.code === 'shared-new-contact')!;
+    expect(f.tier).toBe('block');
+    expect(f.message).toContain('parent@ex.fr');
+  });
+
+  it('BLOCKS when two phone-only new members resolve to the same phone', () => {
+    const f = run({
+      master: [master('Kid, Alban'), master('Kid, Maxence')],
+      register: [reg('Kid, Alban', '', { phone: '0612345678' }), reg('Kid, Maxence', '', { phone: '06 12 34 56 78' })],
+    }).find((x) => x.code === 'shared-new-contact')!;
+    expect(f.tier).toBe('block');
+  });
+
+  it('BLOCKS when a new member\'s only email already belongs to an app record', () => {
+    const f = run({
+      master: [master('Newcomer, Nia')],
+      app: [app('B1', 'Existing, Ed', 'shared@ex.fr')],
+      contacts: [contact('Newcomer, Nia', 'shared@ex.fr')],
+    }).find((x) => x.code === 'new-email-in-app')!;
+    expect(f.tier).toBe('block');
+    expect(f.message).toContain('Existing, Ed');
+  });
+
+  it('says nothing when each new member has their own email', () => {
+    expect(codes({
+      master: [master('Kid, Alban'), master('Kid, Maxence')],
+      register: [reg('Kid, Alban', 'alban@ex.fr'), reg('Kid, Maxence', 'maxence@ex.fr')],
+    })).not.toContain('shared-new-contact');
+  });
+
+  // A Register email that resolves in the app is a BRIDGE (that household record
+  // gets the expiry) — not a doomed creation, so it must not block.
+  it('does not block when the shared email bridges them to an existing record', () => {
+    const f = run({
+      master: [master('Newcomer, Nia')],
+      register: [reg('Newcomer, Nia', 'shared@ex.fr')],
+      app: [app('B1', 'Existing, Ed', 'shared@ex.fr')],
+    });
+    expect(f.map((x) => x.code)).not.toContain('new-email-in-app');
+    expect(f.some((x) => x.tier === 'block')).toBe(false);
+  });
+});
+
 describe('children aggregated', () => {
   it('emits an fyi documenting the aggregation', () => {
     const f = run({

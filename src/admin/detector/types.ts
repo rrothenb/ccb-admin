@@ -10,7 +10,18 @@
  * never mutates anything and never silently merges — every judgement surfaces.
  */
 
-/** Severity tier. 🛑 block halts the sync; ⚠️ confirm needs a human OK; ℹ️ fyi is informational. */
+/**
+ * Severity tier. Only ONE tier gates anything:
+ *   🛑 block   — a downstream tool genuinely CANNOT write until this is fixed;
+ *   ⚠️ review  — advisory, ranked first because it's the interesting stuff
+ *                (contradictions, uncertain matches) — but it does NOT gate;
+ *   ℹ️ fyi     — advisory rollups.
+ *
+ * The rule for choosing: if the admin must change the data before the Borrowers
+ * or Contacts write can proceed, it's `block`. Everything else is advisory —
+ * the admin reads it, decides, and the tools still run. There is no "must
+ * acknowledge" middle ground: that would be blocking without saying so.
+ */
 export type Tier = 'block' | 'confirm' | 'fyi';
 
 /** Which engine produced a finding. R=rule, F=fuzzy(Levenshtein/bridge), AI=LLM (deferred). */
@@ -33,6 +44,8 @@ export type FindingCode =
   | 'missing-email'           // App member has no email
   | 'malformed-email'         // App email fails a basic shape check
   | 'duplicate-email'         // same email on >1 App member
+  | 'shared-new-contact'      // >1 Master member missing from the app resolve to ONE email/phone — can't create both
+  | 'new-email-in-app'        // a to-be-created member's only email already belongs to a different app record
   | 'email-drift'             // app email differs from the Contacts email for the same person
   | 'children-aggregated';    // several Master child-rows fold into one App parent record
 

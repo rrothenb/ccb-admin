@@ -57,10 +57,11 @@
       <h2 style="font-size:1.1rem;margin-top:0">Membership sync — detect</h2>
       <p class="muted">
         Reconciles the Master + Register against the app's members and returns a
-        tiered worklist. It makes no changes — expiry writes and the
-        Contacts/website projection come after the worklist is clear. 🛑 items
-        block the sync; ⚠️ need your confirmation; ℹ️ are informational. Take each
-        one seriously; if you fix anything in the spreadsheets, just re-run.
+        tiered worklist. It makes no changes itself — the tools below do the
+        writing. 🛑 items are the ones that actually stop a write, and they're all
+        that locks those tools; ⚠️ and ℹ️ are advisory — worth reading and acting
+        on, but they hold nothing back. If you fix anything in the spreadsheets or
+        the app, just re-run.
       </p>
       <button id="syncBtn" onclick="runSync()">Run detection</button>
       <div id="syncResult" class="result"></div>
@@ -71,18 +72,19 @@
       <p class="muted">
         Writes this year's cohort back into the app's <strong>Borrowers</strong>
         sheet: <strong>adds</strong> Master members who aren't in the app yet
-        (name + Register email + expiry) and <strong>updates the expiry</strong>
-        of members already there. It only ever writes names it's certain about —
-        an exact match to update, or a genuinely new name with an email to add.
-        Anything ambiguous (a near/fuzzy name, an email-only match, a duplicated
-        or emailless name) is <strong>never written and never silently skipped</strong>:
-        it's listed below for you to fix. Writes are <strong>all-or-nothing</strong> —
-        if anything is skipped, nothing is applied. Existing records keep every other
-        field; only the expiry changes, and nothing is ever deleted.
+        (name + the email or phone found for them + expiry) and
+        <strong>updates the expiry</strong> of members already there — including the
+        household record a member is kept under, which is listed as such. Anything
+        genuinely unsafe (a near/fuzzy name, a duplicated Master name, a member with
+        no contact detail, or two new people sharing one) is
+        <strong>never written and never silently skipped</strong>: each is a 🛑 item in
+        detection, so a clean detection means there's nothing to skip. Writes are
+        <strong>all-or-nothing</strong>. Existing records keep every other field; only
+        the expiry changes, and nothing is ever deleted.
       </p>
       <button id="borPreviewBtn" onclick="runBorrowers(false)" disabled>Preview</button>
       <button id="borApplyBtn" onclick="runBorrowers(true)" disabled style="background:#b06a00;border-color:#b06a00">Apply to Borrowers</button>
-      <div id="borGateNote" class="muted" style="margin-top:0.5rem">Run <strong>Membership sync — detect</strong> first — this unlocks once it reports no name ambiguities.</div>
+      <div id="borGateNote" class="muted" style="margin-top:0.5rem">Run <strong>Membership sync — detect</strong> first — that unlocks the preview. Apply additionally needs a detection with nothing 🛑 blocking.</div>
       <div id="borResult" class="result"></div>
     </div>
 
@@ -98,7 +100,7 @@
       </p>
       <button id="conPreviewBtn" onclick="runContacts(false)" disabled>Preview</button>
       <button id="conApplyBtn" onclick="runContacts(true)" disabled style="background:#b06a00;border-color:#b06a00">Apply to Contacts</button>
-      <div id="conGateNote" class="muted" style="margin-top:0.5rem">Run <strong>Membership sync — detect</strong> first — this unlocks once it reports no discrepancies.</div>
+      <div id="conGateNote" class="muted" style="margin-top:0.5rem">Run <strong>Membership sync — detect</strong> first — that unlocks the preview. Apply additionally needs a detection with nothing 🛑 blocking.</div>
       <div id="conResult" class="result"></div>
     </div>
 
@@ -133,8 +135,8 @@
 
     <script>
       var TIER_META = {
-        block:   { icon: '🛑', label: 'Blocking — must fix before syncing' },
-        confirm: { icon: '⚠️', label: 'Needs review' },
+        block:   { icon: '🛑', label: 'Blocking — a write can\'t proceed until this is fixed' },
+        confirm: { icon: '⚠️', label: 'Worth a look — advisory, nothing is held back' },
         fyi:     { icon: 'ℹ️', label: 'For your information' }
       };
 
@@ -235,8 +237,10 @@
         var out = document.getElementById('syncResult');
         var report = res.report, stats = res.stats, plan = res.plan, c = report.counts;
         var gate = report.canSync
-          ? '<div class="gate ok">✓ No blocking issues — ready for the (not-yet-built) write phase.</div>'
-          : '<div class="gate blocked">🛑 ' + c.block + ' blocking issue(s) — fix these before the sync can run.</div>';
+          ? '<div class="gate ok">✓ Nothing blocking — the Borrowers and Contacts tools below are unlocked. ' +
+              'Anything ⚠️/ℹ️ is advisory: read it and decide, it doesn\'t hold the writes back.</div>'
+          : '<div class="gate blocked">🛑 ' + c.block + ' blocking issue(s) — these genuinely stop a write. ' +
+              'Fix them and re-run to unlock the tools below.</div>';
 
         var summary =
           '<div class="muted">' +
@@ -296,8 +300,8 @@
       var SKIP_LABEL = {
         'ambiguous-match': 'Uncertain match',
         'name-collision': 'Duplicated name',
-        'no-email': 'No email to add with',
-        'shared-email': 'Shared email',
+        'no-email': 'No email or phone to add with',
+        'shared-email': 'Shared contact detail',
         'email-in-app': 'Email already in app'
       };
 
@@ -327,7 +331,7 @@
         // If anything is skipped (and we haven't already applied), Apply is blocked:
         // writes are all-or-nothing.
         var partialBlock = (plan.skipped.length && !(stats && stats.applied))
-          ? '<div class="gate blocked">🛑 ' + plan.skipped.length + ' item(s) below are unresolved — nothing can be written until they\'re fixed (writes are all-or-nothing). Fix them in the spreadsheets/app and re-run detection.</div>'
+          ? '<div class="gate blocked">🛑 ' + plan.skipped.length + ' item(s) below can\'t be written safely, so nothing is applied (writes are all-or-nothing). Each one is also a 🛑 item in detection — fix them in the spreadsheets/app and re-run.</div>'
           : '';
 
         out.innerHTML = applied + partialBlock +
@@ -335,12 +339,20 @@
             'Master tab "' + escapeHtml(stats.masterTab) + '" · every written member gets expiry <strong>' + escapeHtml(target) + '</strong>.</div>' +
           '<div class="muted">' + plan.alreadyCurrentCount + ' already at that expiry — no change.</div>' +
           failRows +
-          section('Add — new Borrowers', '', plan.toAdd, ['Name', 'Email', 'Expiry'], function (a) {
-            return '<tr><td class="nowrap">' + escapeHtml(a.name) + '</td><td class="nowrap">' + escapeHtml(a.email) +
-              '</td><td class="nowrap">' + escapeHtml(humanDate(a.expiryISO)) + '</td></tr>';
+          section('Add — new Borrowers', '', plan.toAdd, ['Name', 'Email / phone', 'Where that came from', 'Expiry'], function (a) {
+            // A household-guess detail is the one thing here worth a second look —
+            // this preview is where it gets checked, so it's called out in orange.
+            var via = a.contactIsGuess
+              ? '<span style="color:#b06a00">⚠️ ' + escapeHtml(a.contactVia) + '</span>'
+              : escapeHtml(a.contactVia);
+            return '<tr><td class="nowrap">' + escapeHtml(a.name) + '</td><td class="nowrap">' + escapeHtml(a.email || a.phone) +
+              '</td><td>' + via + '</td><td class="nowrap">' + escapeHtml(humanDate(a.expiryISO)) + '</td></tr>';
           }) +
-          section('Update expiry', '', plan.toUpdate, ['Member', 'Current expiry', 'Would become'], function (u) {
-            return '<tr><td class="nowrap">' + escapeHtml(u.name) + '</td><td class="nowrap">' + escapeHtml(u.fromRaw) +
+          section('Update expiry', '', plan.toUpdate, ['Member', 'Matched from', 'Current expiry', 'Would become'], function (u) {
+            var from = u.via === 'exact'
+              ? '<span class="muted">exact name</span>'
+              : '<span style="color:#b06a00">household email · ' + escapeHtml(u.fromMaster.join(', ')) + '</span>';
+            return '<tr><td class="nowrap">' + escapeHtml(u.name) + '</td><td>' + from + '</td><td class="nowrap">' + escapeHtml(u.fromRaw) +
               '</td><td class="nowrap">&rarr; ' + escapeHtml(humanDate(u.toISO)) + '</td></tr>';
           }) +
           section('Skipped — not written (fix these, then re-run)', '#b06a00', plan.skipped, ['Name', 'Why', 'Detail'], function (s) {
@@ -351,73 +363,81 @@
             ? '<p class="muted">Borrowers already match — nothing to add or update.</p>' : '');
       }
 
-      // The Borrowers tool stays locked until a detection run comes back with no
-      // NAME ambiguities (fuzzy/near names, email-only matches, duplicate names) —
-      // those are exactly what would make a write unsafe.
-      var AMBIGUITY_CODES = { 'name-collision': 1, 'fuzzy-name-match': 1, 'email-bridge-match': 1 };
+      // ONE gate, and it's honest: 🛑 blocking findings are exactly the things that
+      // stop a write, so they're what locks these tools. ⚠️/ℹ️ findings are advisory
+      // — the admin reads them and decides; they never withhold anything (there's no
+      // "mark as resolved" UI, so anything that gated silently would just be a
+      // blocker in disguise). Preview writes nothing either way, so it unlocks on any
+      // successful detection: seeing the planned writes is how the findings get judged.
       var borPreviewAllowed = false;
+      var borApplyAllowed = false;
       var borApplyArmed = false;
 
       function resetBorrowerGate(msg) {
         borPreviewAllowed = false;
+        borApplyAllowed = false;
         borApplyArmed = false;
         document.getElementById('borPreviewBtn').disabled = true;
         var applyBtn = document.getElementById('borApplyBtn');
         applyBtn.disabled = true;
         applyBtn.textContent = 'Apply to Borrowers';
         var note = document.getElementById('borGateNote');
-        if (note) note.innerHTML = msg || 'Run <strong>Membership sync — detect</strong> first — this unlocks once it reports no name ambiguities.';
+        if (note) note.innerHTML = msg || 'Run <strong>Membership sync — detect</strong> first — that unlocks the preview.';
       }
 
-      // Called after a successful detection run: unlock Preview iff the report is
-      // free of name ambiguities. A fresh detection always re-locks Apply.
+      // Called after a successful detection run: Preview always unlocks; Apply is
+      // armed when nothing is blocking. A fresh detection re-locks Apply.
       function updateBorrowerGate(report) {
-        var hasAmbiguity = report.findings.some(function (f) { return AMBIGUITY_CODES[f.code]; });
-        if (hasAmbiguity) {
-          resetBorrowerGate('Resolve the name ambiguities above (fuzzy / email-only matches, duplicate names), then re-run detection to unlock the Borrowers tool.');
-          return;
-        }
         borPreviewAllowed = true;
+        borApplyAllowed = report.counts.block === 0;
         borApplyArmed = false;
         document.getElementById('borPreviewBtn').disabled = false;
         var applyBtn = document.getElementById('borApplyBtn');
         applyBtn.disabled = true;
         applyBtn.textContent = 'Apply to Borrowers';
         var note = document.getElementById('borGateNote');
-        if (note) note.innerHTML = 'Detection found no name ambiguities — <strong>Preview</strong> the Borrowers writes.';
+        if (note) {
+          note.innerHTML = borApplyAllowed
+            ? 'Detection reported nothing blocking — <strong>Preview</strong> the Borrowers writes, then Apply.'
+            : '<strong>Preview</strong> is open (it writes nothing), but Apply stays locked: ' + report.counts.block +
+              ' 🛑 blocking issue(s) above. Fix them and re-run detection to unlock Apply.';
+        }
       }
 
-      // The Contacts projection stays locked until detection comes back with no
-      // DISCREPANCIES — any 🛑 blocking or ⚠️ needs-review finding. Unlike the
-      // Borrowers write, class/teacher/level and email findings matter here too:
-      // they become the contact's labels and address.
+      // The Contacts projection preview is likewise read-only, and applying is gated
+      // on the same single thing: no 🛑 blocking findings. Class/level disagreements
+      // and spelling wobbles are advisory here too — they're worth reading, but the
+      // Master is authoritative for labels, so they don't stop the projection.
       var conPreviewAllowed = false;
+      var conApplyAllowed = false;
 
       function resetContactsGate(msg) {
         conPreviewAllowed = false;
+        conApplyAllowed = false;
         conApplyArmed = false;
         document.getElementById('conPreviewBtn').disabled = true;
         var applyBtn = document.getElementById('conApplyBtn');
         applyBtn.disabled = true;
         applyBtn.textContent = 'Apply to Contacts';
         var note = document.getElementById('conGateNote');
-        if (note) note.innerHTML = msg || 'Run <strong>Membership sync — detect</strong> first — this unlocks once it reports no discrepancies.';
+        if (note) note.innerHTML = msg || 'Run <strong>Membership sync — detect</strong> first — that unlocks the preview.';
       }
 
       function updateContactsGate(report) {
-        var hasDiscrepancy = report.counts.block > 0 || report.counts.confirm > 0;
-        if (hasDiscrepancy) {
-          resetContactsGate('Resolve the 🛑 blocking and ⚠️ needs-review items above, then re-run detection to unlock the Contacts projection.');
-          return;
-        }
         conPreviewAllowed = true;
+        conApplyAllowed = report.counts.block === 0;
         conApplyArmed = false;
         document.getElementById('conPreviewBtn').disabled = false;
         var applyBtn = document.getElementById('conApplyBtn');
         applyBtn.disabled = true;
         applyBtn.textContent = 'Apply to Contacts';
         var note = document.getElementById('conGateNote');
-        if (note) note.innerHTML = 'Detection found no discrepancies — <strong>Preview</strong> the projection.';
+        if (note) {
+          note.innerHTML = conApplyAllowed
+            ? 'Detection reported nothing blocking — <strong>Preview</strong> the projection, then Apply.'
+            : '<strong>Preview</strong> is open (it writes nothing), but Apply stays locked: ' + report.counts.block +
+              ' 🛑 blocking issue(s) above. Fix them and re-run detection to unlock Apply.';
+        }
       }
 
       // Changing either uploaded file invalidates the last detection, so re-lock.
@@ -461,10 +481,11 @@
               }
               renderBorrowerPlan(res);
               // Enable Apply only after a successful preview that has something to
-              // write AND nothing skipped — writes are all-or-nothing.
+              // write AND nothing skipped — writes are all-or-nothing — and only
+              // when the detection run itself was free of name ambiguities.
               var hasWrites = res.plan.toAdd.length || res.plan.toUpdate.length;
               var hasSkips = res.plan.skipped.length > 0;
-              applyBtn.disabled = apply || !hasWrites || hasSkips;
+              applyBtn.disabled = apply || !borApplyAllowed || !hasWrites || hasSkips;
             })
             .withFailureHandler(function (err) {
               previewBtn.disabled = false;
@@ -546,9 +567,10 @@
                 return;
               }
               renderContactPlan(res);
-              // Enable Apply only after a successful preview that has changes.
+              // Enable Apply only after a successful preview that has changes, and
+              // only when detection came back free of discrepancies.
               var hasChanges = res.plan.toCreate.length || res.plan.toUpdate.length || res.plan.toRemove.length;
-              applyBtn.disabled = apply || !hasChanges;
+              applyBtn.disabled = apply || !conApplyAllowed || !hasChanges;
             })
             .withFailureHandler(function (err) {
               previewBtn.disabled = false;

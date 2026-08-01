@@ -14,8 +14,8 @@ import { reconcile, ReconContext } from './match';
 import { runRules } from './rules';
 
 export * from './types';
-export { reconcile } from './match';
-export type { ReconContext, MasterLink, SiblingGroup } from './match';
+export { reconcile, resolveNewMembers } from './match';
+export type { ReconContext, MasterLink, SiblingGroup, NewMemberResolution } from './match';
 
 /** Sort order for tiers — most urgent first. */
 const TIER_RANK: Record<Tier, number> = { block: 0, confirm: 1, fyi: 2 };

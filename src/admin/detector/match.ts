@@ -181,6 +181,25 @@ export function findMemberContact(ctx: ReconContext, rawName: string): MemberCon
   );
 }
 
+/** A Master row with no app record at all, paired with the contact detail we'd create it from. */
+export interface NewMemberResolution {
+  master: MasterRow;
+  /** The email/phone the Borrowers add would use, or null when nothing was found anywhere. */
+  hit: MemberContactHit | null;
+}
+
+/**
+ * Every Master row that has NO app record, resolved to the contact detail a
+ * creation would use. Shared by the rules and the Borrowers planner so the
+ * worklist and the write plan can never disagree about who is creatable: if this
+ * says "no hit", the rules block it AND the planner skips it, for the same reason.
+ */
+export function resolveNewMembers(ctx: ReconContext): NewMemberResolution[] {
+  return ctx.links
+    .filter((l) => l.kind === 'none')
+    .map((l) => ({ master: l.master, hit: findMemberContact(ctx, l.master.rawName) }));
+}
+
 /** Appends a value to the array stored at `key`, creating the array if absent. */
 function pushHousehold<T>(map: Map<string, T[]>, key: string, value: T): void {
   const arr = map.get(key);
@@ -374,9 +393,14 @@ function linkOne(
     return { master, app: best.app, kind: 'fuzzy', distance: best.distance };
   }
 
-  // 3. Email bridge — Register household email that resolves in the App.
-  const bridgeEmail = registerEmailByNameKey.get(mKey);
-  if (bridgeEmail) {
+  // 3. Email bridge — Register household email that resolves in the App. Looked up
+  // under BOTH name forms (plain and annotation-stripped), the same keys
+  // `findMemberContact` uses: an annotated Master name ("DELCOURT, Syma - mother
+  // Ola") must reach its Register email here too, or it would look like a brand-new
+  // member whose email is mysteriously already taken.
+  for (const k of masterLookupKeys(master.rawName)) {
+    const bridgeEmail = registerEmailByNameKey.get(k);
+    if (!bridgeEmail) continue;
     const viaEmail = appByEmail.get(emailKey(bridgeEmail));
     if (viaEmail && viaEmail.length >= 1) {
       return { master, app: viaEmail[0], kind: 'email-bridge', bridgeEmail };

@@ -12,9 +12,11 @@
  *   - applyBorrowerWrites(...)    WRITES: adds/updates via the Borrower service.
  *
  * The pure planner (borrower-plan.ts) decides what is safe; anything ambiguous
- * (fuzzy/bridge match, colliding or shared name/email) is never written and never
- * silently dropped — it comes back in `plan.skipped` for the admin to fix. No
- * Borrower is ever deleted, and updates touch ONLY the expiry field.
+ * (a fuzzy name, a colliding Master name, a shared or already-taken contact
+ * detail) is never written and never silently dropped — it comes back in
+ * `plan.skipped`, and each such case is also a 🛑 finding in the detection run,
+ * so a clean detection means this plan has nothing to skip. No Borrower is ever
+ * deleted, and updates touch ONLY the expiry field.
  */
 
 import { reconcile, DetectorInput } from './detector';
@@ -25,6 +27,7 @@ import { uploadedXlsxToSheetId, trashSheet, sheetToStringGrid } from './ingest/x
 import { membershipExpiry } from './expiry';
 import { planBorrowerWrites, isoToHuman, BorrowerWritePlan } from './borrower-plan';
 import { getBorrowerService } from '../services/borrowers';
+import { readAllContacts } from './contacts/read';
 import { logAdmin } from './log';
 
 export interface BorrowerWriteResult {
@@ -53,7 +56,13 @@ function pickMasterTab(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): GoogleApps
 function loadAppMembers(): AppMember[] {
   const res = getBorrowerService().getAll();
   if (!res.success || !res.data) throw new Error(`Could not read app members: ${res.error || 'unknown error'}`);
-  return res.data.map((b) => ({ id: String(b.id), rawName: b.name, email: b.email || '', expiryDate: b.expiryDate || '' }));
+  return res.data.map((b) => ({
+    id: String(b.id),
+    rawName: b.name,
+    email: b.email || '',
+    phone: b.phone || '',
+    expiryDate: b.expiryDate || '',
+  }));
 }
 
 /** Parses the uploads + Borrowers into a write plan (no side effects). */
@@ -75,8 +84,18 @@ function computePlan(
     const register = parseRegisterTabs(SpreadsheetApp.openById(registerSheetId).getSheets().map((s) => sheetToStringGrid(s)));
 
     const app = loadAppMembers();
+
+    // Contacts feed the same email/phone resolution the detection run uses; without
+    // them this plan could skip someone detection called creatable. Never fatal.
+    let contacts: ReturnType<typeof readAllContacts> = [];
+    try {
+      contacts = readAllContacts();
+    } catch (e) {
+      logAdmin(`Contacts read skipped while planning Borrowers writes (continuing without): ${e}`);
+    }
+
     const classIds = Array.from(new Set(register.map((r) => r.classId).filter(Boolean)));
-    const input: DetectorInput = { master: masterParse.members, register, app, roster: { validClassIds: classIds } };
+    const input: DetectorInput = { master: masterParse.members, register, app, roster: { validClassIds: classIds }, contacts };
     const ctx = reconcile(input);
 
     const computedExpiry = membershipExpiry(masterTab.getName());
@@ -153,7 +172,7 @@ function applyBorrowerWrites(
 
     for (const a of plan.toAdd) {
       try {
-        const res = svc.createBorrower(a.name, a.email, '', '', '', '', '', humanExpiry, today);
+        const res = svc.createBorrower(a.name, a.email, a.phone, '', '', '', '', humanExpiry, today);
         if (!res.success) throw new Error(res.error || 'unknown error');
         added++;
       } catch (e) {

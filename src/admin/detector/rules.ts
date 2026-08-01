@@ -12,7 +12,7 @@
  */
 
 import { Finding, FindingCode, Tier, Engine } from './types';
-import { ReconContext, MasterLink, findMemberContact, findRegisterRows, findContactRows } from './match';
+import { ReconContext, MasterLink, findMemberContact, findRegisterRows, findContactRows, resolveNewMembers } from './match';
 import { ContactRecord } from './types';
 import { nameKey, emailKey, isEmailShaped, isPhoneShaped } from './normalize';
 import { voteSpelling, looksLikeTypo, SpellingVote, SpellingEntry } from './spelling';
@@ -67,6 +67,7 @@ export function runRules(ctx: ReconContext, now: Date = new Date()): Finding[] {
   out.push(...statusContradictions(ctx));
   out.push(...classChecks(ctx));
   out.push(...emailChecks(ctx));
+  out.push(...newMemberContactClashes(ctx));
   out.push(...emailDrift(ctx));
   out.push(...childrenAggregated(ctx));
   out.push(...spellingDisagreements(ctx));
@@ -224,7 +225,7 @@ function crossPresence(ctx: ReconContext, now: Date): Finding[] {
         'master-household-email',
         'confirm',
         'rule',
-        `${household.length} Master member(s) aren't in the app and have no exact name match, but the Register or Contacts has an email or phone under the same surname (a household guess — verify each is the right person before creating them): ${detail}.`,
+        `${household.length} Master member(s) aren't in the app and have no exact name match, but the Register or Contacts has an email or phone under the same surname. The Borrowers tool will create them with it — each is flagged in that tool's preview, so check them there before applying: ${detail}.`,
         names
       )
     );
@@ -446,6 +447,63 @@ function emailChecks(ctx: ReconContext): Finding[] {
           'rule',
           `Email ${email} is shared by ${names.length} distinct current members (${names.join(', ')}). If they're one household this may be fine, but confirm they aren't a duplicate record.`,
           [email, ...names]
+        )
+      );
+    }
+  }
+  return out;
+}
+
+/**
+ * 🛑 Contact-detail clashes among the people the Borrowers tool would CREATE.
+ * These are the only two ways a creation can be impossible once a contact detail
+ * has been found, so they're blocking — the admin must merge/fix by hand:
+ *   - two new people resolve to the ONE email/phone (creating both would make
+ *     duplicate records that then collapse into a single Gmail contact);
+ *   - the only email found already belongs to a different app record.
+ * Both read from `resolveNewMembers`, the same resolution the planner writes from.
+ */
+function newMemberContactClashes(ctx: ReconContext): Finding[] {
+  const out: Finding[] = [];
+  const resolved = resolveNewMembers(ctx).filter((r) => r.hit);
+
+  // Group by the normalized detail so an email and a phone can't be conflated.
+  const byDetail = new Map<string, { names: string[]; value: string }>();
+  for (const r of resolved) {
+    const hit = r.hit as NonNullable<typeof r.hit>;
+    const k = `${hit.kind}:${hit.kind === 'email' ? emailKey(hit.value) : hit.value.replace(/\D/g, '')}`;
+    const entry = byDetail.get(k);
+    if (entry) entry.names.push(r.master.rawName);
+    else byDetail.set(k, { names: [r.master.rawName], value: hit.value });
+  }
+  for (const { names, value } of byDetail.values()) {
+    if (names.length > 1) {
+      const sorted = names.sort();
+      out.push(
+        make(
+          'shared-new-contact',
+          'block',
+          'rule',
+          `${sorted.length} member(s) missing from the app (${sorted.join(', ')}) all resolve to the single contact detail ${value}, so they can't be created as separate records. Add the household once by hand in the app (or give them distinct emails), then re-run.`,
+          [value, ...sorted]
+        )
+      );
+    }
+  }
+
+  for (const r of resolved) {
+    const hit = r.hit as NonNullable<typeof r.hit>;
+    if (hit.kind !== 'email') continue;
+    const owners = ctx.appByEmail.get(emailKey(hit.value)) || [];
+    if (owners.length > 0) {
+      out.push(
+        make(
+          'new-email-in-app',
+          'block',
+          'rule',
+          `"${r.master.rawName}" isn't in the app, but the only email found for them (${hit.value}) already belongs to app member "${owners[0].rawName}". Creating them would duplicate that address — reconcile the two names by hand (or give them their own email), then re-run.`,
+          [r.master.rawName, hit.value, owners[0].rawName],
+          `Master row ${r.master.rowNumber}`
         )
       );
     }
