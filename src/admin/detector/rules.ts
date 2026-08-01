@@ -16,6 +16,7 @@ import { ReconContext, MasterLink, findMemberContact, findRegisterRows, findCont
 import { ContactRecord } from './types';
 import { nameKey, emailKey, isEmailShaped, isPhoneShaped } from './normalize';
 import { voteSpelling, looksLikeTypo, SpellingVote, SpellingEntry } from './spelling';
+import { nameKinship } from './kinship';
 import { splitClassIds } from '../classid';
 
 /** Statuses that mean "this person is leaving / has left". */
@@ -496,15 +497,21 @@ function newMemberContactClashes(ctx: ReconContext): Finding[] {
     if (hit.kind !== 'email') continue;
     const owners = ctx.appByEmail.get(emailKey(hit.value)) || [];
     if (owners.length > 0) {
+      const master = r.master.rawName;
+      const appName = owners[0].rawName;
+      // The shared email already ties these two records together, so it's worth
+      // asking WHY the names differ — "same person, written differently" and "two
+      // people on one address" need opposite fixes, and the admin shouldn't have
+      // to work out which from a message that assumes the wrong one.
+      const kin = nameKinship(master, appName);
+      const lead = `"${master}" isn't in the app, and the only email found for them (${hit.value}) already belongs to app member "${appName}".`;
+      const message = !kin
+        ? `${lead} They may be the same person recorded under different names, or two people sharing one address — either way they can't be told apart well enough to create a second record. If it's one person, make the two names match; if it's two, give the new one their own email. Then re-run.`
+        : kin.strength === 'strong'
+          ? `${lead} They look like the same person written two ways — ${kin.reason}. If so, make the two names match (fix whichever spelling is wrong) and re-run: their expiry will then be updated instead of a duplicate record being created. If they really are two people, give the new one their own email.`
+          : `${lead} They may be the same person written two ways — ${kin.reason}. Make the two names match if it's one person, or give the new one their own email if it's two, then re-run.`;
       out.push(
-        make(
-          'new-email-in-app',
-          'block',
-          'rule',
-          `"${r.master.rawName}" isn't in the app, but the only email found for them (${hit.value}) already belongs to app member "${owners[0].rawName}". Creating them would duplicate that address — reconcile the two names by hand (or give them their own email), then re-run.`,
-          [r.master.rawName, hit.value, owners[0].rawName],
-          `Master row ${r.master.rowNumber}`
-        )
+        make('new-email-in-app', 'block', kin ? 'fuzzy' : 'rule', message, [master, hit.value, appName], `Master row ${r.master.rowNumber}`)
       );
     }
   }

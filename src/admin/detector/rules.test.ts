@@ -405,6 +405,38 @@ describe('new-member contact clashes', () => {
     expect(f.message).toContain('Existing, Ed');
   });
 
+  // The block is the same either way — a duplicate address can't be created — but
+  // the instruction differs, so the message has to name the likely reading.
+  it('names the likely spelling difference when the two records look like one person', () => {
+    const f = run({
+      master: [master('CALLENS, M-Christine')],
+      app: [app('B1', 'Callens, Marie-Christine', 'xstine@ex.fr')],
+      contacts: [contact('CALLENS, M-Christine', 'xstine@ex.fr')],
+    }).find((x) => x.code === 'new-email-in-app')!;
+    expect(f.tier).toBe('block');
+    expect(f.message).toContain('look like the same person');
+    expect(f.message).toContain('short for');
+  });
+
+  it('stays even-handed when an extra given name could mean a second person', () => {
+    const f = run({
+      master: [master('CORDONNIER - Bernard-Philippe')],
+      app: [app('B1', 'CORDONNIER, Philippe', 'ph@ex.fr')],
+      contacts: [contact('CORDONNIER - Bernard-Philippe', 'ph@ex.fr')],
+    }).find((x) => x.code === 'new-email-in-app')!;
+    expect(f.message).toContain('may be the same person');
+    expect(f.message).toContain('second family member');
+  });
+
+  it('makes no claim at all about two names with nothing in common', () => {
+    const f = run({
+      master: [master('Newcomer, Nia')],
+      app: [app('B1', 'Existing, Ed', 'shared@ex.fr')],
+      contacts: [contact('Newcomer, Nia', 'shared@ex.fr')],
+    }).find((x) => x.code === 'new-email-in-app')!;
+    expect(f.message).toContain('may be the same person recorded under different names, or two people sharing one address');
+  });
+
   it('says nothing when each new member has their own email', () => {
     expect(codes({
       master: [master('Kid, Alban'), master('Kid, Maxence')],
