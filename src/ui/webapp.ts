@@ -15,7 +15,7 @@ import { writeAuditLog } from '../services/audit-log';
 function doGet(): GoogleAppsScript.HTML.HtmlOutput {
   return HtmlService.createTemplateFromFile('App')
     .evaluate()
-    .setTitle('CCB Library Admin')
+    .setTitle('Freedom')
     .setFaviconUrl('https://www.ccb-lille.com/wp-content/uploads/2024/02/cropped-favicon-32x32.png')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
@@ -28,7 +28,7 @@ function doGet(): GoogleAppsScript.HTML.HtmlOutput {
  */
 function getAppContext(): { view: SheetName; userEmail: string } {
   const userEmail = Session.getActiveUser().getEmail();
-  writeAuditLog(userEmail, 'opened CCB Library Admin');
+  writeAuditLog(userEmail, 'opened Freedom');
   return {
     view: 'Borrowers', // Default view
     userEmail,

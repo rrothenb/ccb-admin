@@ -1,6 +1,6 @@
 # Library Management System - Setup Guide
 
-Complete setup instructions for deploying the CCB Library Admin web application.
+Complete setup instructions for deploying the Freedom web application.
 
 ## Prerequisites
 
@@ -64,7 +64,7 @@ In Google Drive, create these **3 spreadsheets**:
 Create a new standalone Apps Script project:
 
 ```bash
-npx clasp create --type standalone --title "CCB Library Admin"
+npx clasp create --type standalone --title "Freedom"
 ```
 
 This creates a `.clasp.json` file with your script ID.
@@ -99,7 +99,7 @@ This searches your Drive for spreadsheets whose names start with "Borrowers", "M
 
 **First run:** you'll need to authorize the script:
 - Click "Review permissions" → choose your account
-- Click "Advanced" → "Go to CCB Library Admin (unsafe)" → "Allow"
+- Click "Advanced" → "Go to Freedom (unsafe)" → "Allow"
 
 Check the execution log — you should see each of the three spreadsheets found.
 
@@ -147,7 +147,7 @@ If you haven't already created the deployment (step 5 uses an existing deploymen
 1. In the Apps Script editor, click **Deploy → New deployment**
 2. Click the gear next to "Select type" and choose **Web app**
 3. Fill in the settings:
-   - **Description:** "CCB Library Admin v1" (or your preference)
+   - **Description:** "Freedom v1" (or your preference)
    - **Execute as:** **User accessing the web app**
    - **Who has access:** **Anyone with a Google account**
 4. Click **Deploy** and copy the web app URL:
@@ -199,7 +199,7 @@ cp .clasp.json .clasp.dev.json
 
 # Switch to prod account and create prod project
 npx clasp login
-npx clasp create --type standalone --title "CCB Library Admin Production"
+npx clasp create --type standalone --title "Freedom Production"
 
 # Save production config
 cp .clasp.json .clasp.prod.json
@@ -257,7 +257,7 @@ Adds column headers to all master spreadsheets. Safe to run when sheets are empt
 ### Authorization errors
 The first time the script runs, Google asks for permissions. On free accounts you may see an "Unverified app" warning:
 1. Click **Advanced**
-2. Click **Go to CCB Library Admin (unsafe)**
+2. Click **Go to Freedom (unsafe)**
 3. Review permissions and click **Allow**
 
 This is normal for personal projects that haven't gone through Google's verification process.

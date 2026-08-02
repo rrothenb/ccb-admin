@@ -1,4 +1,4 @@
-# CCB Library Admin - Web App
+# Freedom - Web App
 
 A library management system built on Google Apps Script and Google Sheets, deployed as a standalone web application.
 
