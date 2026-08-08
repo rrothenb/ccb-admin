@@ -14,9 +14,9 @@ This system provides a web-based interface for managing a community library. It 
 
 - **[liberty-extract](https://github.com/rrothenb/liberty-extract)** — companion tooling that extracts the data needed to populate the master spreadsheets (Borrowers, Media, Loans) out of **Liberty**, the library system this app is migrating from. Use it to produce the initial spreadsheet data for setup.
 
-### Admin sync tool (in-progress)
+### Admin sync tool
 
-A **second, master-account-only Apps Script project** lives in this same repo (`src/admin-entry.ts` → `dist-admin/`, deployed via `npm run deploy:admin`). It carries the sensitive `contacts`/Drive scopes — kept out of the main app so regular users never have to consent to them — and will own the membership-sync / detector / Gmail-Contacts / website-generation workflow. See **[SETUP-admin.md](SETUP-admin.md)** for its setup and first-run configuration.
+A **second, master-account-only Apps Script project** lives in this same repo (`src/admin-entry.ts` → `dist-admin/`, deployed via `npm run deploy:admin`). It carries the sensitive `contacts`/Drive scopes — kept out of the main app so regular users never have to consent to them — and owns the once-a-year membership workflow: reconcile the Master + Register spreadsheets against the app and the account's Contacts, write back the Borrowers sheet, project Gmail Contacts labels, and regenerate the website's catalogue and class-schedule PDFs. Every write is preview-first and additive. See **[SETUP-admin.md](SETUP-admin.md)**.
 
 ## Key Features
 
@@ -30,19 +30,19 @@ A **second, master-account-only Apps Script project** lives in this same repo (`
 
 ## Quick Start
 
-See [SETUP.md](SETUP.md) for detailed setup instructions.
+See [SETUP.md](SETUP.md) for detailed setup instructions, or [MIGRATION.md](MIGRATION.md) if you're moving an existing deployment to a different Google account.
 
 **Summary:**
 1. Install dependencies: `npm install`
 2. Log in to Google Apps Script: `npx clasp login`
 3. Create 3 master spreadsheets in your Drive named **Borrowers**, **Media**, and **Loans**
 4. Create the Apps Script project: `npx clasp create --type standalone`
-5. Push the code and create a deployment: `npm run deploy`
-6. Configure in the Apps Script editor:
-   - Run `runDiscovery()` to locate and store the master spreadsheet IDs
+5. Push the code: `npm run push` (not `deploy` — there's no deployment to update yet)
+6. Deploy as a web app (Execute as: **User accessing**, Access: **Anyone with a Google account**), and pin the new deployment ID in `package.json`'s `deploy:main`
+7. Configure in the Apps Script editor:
+   - Fill in `MASTER_SPREADSHEETS` at the top of `src/gas-entry.ts`, push, and run `setMasterSpreadsheetIdsFromConstants()`
    - (Optional) Run `setAuditLogSpreadsheetId()` to enable audit logging
    - Run `showConfig()` to verify configuration
-7. Deploy as a web app (Execute as: **User accessing**, Access: **Anyone with a Google account**)
 8. Share the **three master spreadsheets** with your users, and give them the web app URL
 
 ## Architecture
@@ -63,7 +63,7 @@ operation fails with an "Access denied" message
 
 ### Spreadsheets
 
-**3 Master Spreadsheets** (your data) — discovered by name prefix via `runDiscovery()`:
+**3 Master Spreadsheets** (your data) — the main app is pointed at them by ID via `setMasterSpreadsheetIdsFromConstants()`; the admin project finds them by name prefix via `runDiscovery()`:
 - **Borrowers** — library members
 - **Media** — books, DVDs, etc. (a.k.a. "Resources" in the UI)
 - **Loans** — active checkout records (rows are removed on return)
@@ -106,10 +106,10 @@ npx clasp open
 
 Then run these functions from the editor's function dropdown:
 
-1. **`runDiscovery`** — searches your Drive for spreadsheets whose names start with "Borrowers", "Media", and "Loans" (newest match wins) and stores their IDs in script properties. Check the execution log to confirm all three were found.
-2. **`setAuditLogSpreadsheetId`** *(optional)* — enables audit logging by recording the log spreadsheet ID in script properties.
+1. **`setMasterSpreadsheetIdsFromConstants`** — stores the three IDs you filled into `MASTER_SPREADSHEETS` at the top of `src/gas-entry.ts` (IDs or Sheets URLs both work). This is how the main app is configured: its manifest carries no Drive scope, so the name-based `runDiscovery` can't run here.
+2. **`setAuditLogSpreadsheetId`** *(optional)* — enables audit logging by recording the log spreadsheet ID in script properties. The ID is a constant in `src/services/audit-log.ts`; the account must be able to open that sheet.
 3. **`showConfig`** — prints the current configuration so you can verify the master spreadsheet IDs are set.
-4. **`clearConfig`** — clears the stored master spreadsheet configuration (useful before re-running discovery).
+4. **`clearConfig`** — clears the stored master spreadsheet configuration.
 
 ### Deploy as a web app
 
@@ -150,31 +150,46 @@ npm run lint
 
 ## Available Commands
 
-- `npm run build` — Compile/bundle TypeScript to `dist/`
-- `npm run push` — Build and push files to Apps Script (no new deployment)
-- `npm run deploy` — Build, push, and update the live web-app deployment
+- `npm run build` / `build:admin` — Compile/bundle TypeScript to `dist/` / `dist-admin/`
+- `npm run push` / `push:admin` — Build and push files to Apps Script (no new deployment)
+- `npm run deploy` / `deploy:admin` — Build, push, and update the live deployment
+- `npm run open` / `open:admin` — Open the project in the Apps Script editor
 - `npm run watch` — Type-check on change
 - `npm test` / `npm run test:watch` / `npm run test:coverage` — Jest tests
 - `npm run lint` — ESLint
-- `npx clasp open` — Open in the Apps Script editor
 - `npx clasp logs` — View execution logs
+
+> The two `deploy` scripts each pin a deployment ID. They belong to the account that created those deployments — a new account needs its own IDs pasted in. See [MIGRATION.md](MIGRATION.md).
 
 ## Project Structure
 
 ```
 ccb-admin/
 ├── src/
-│   ├── types/           # TypeScript type definitions (entities, config)
-│   ├── services/        # Business logic (borrowers, media, loans, discovery, audit-log)
-│   ├── ui/              # Web app UI
-│   │   ├── webapp.ts    # doGet entry point
-│   │   └── html/        # HTML templates (App.html, AppJS.html, Styles.html)
-│   └── gas-entry.ts     # Apps Script global function exports (client-callable)
-├── dist/                # Compiled output (auto-generated, pushed to GAS)
-├── build.js             # Build script (esbuild)
-├── package.json         # Dependencies and scripts
-├── tsconfig.json        # TypeScript configuration
-└── appsscript.json      # Apps Script manifest (web app + OAuth scopes)
+│   ├── types/                # TypeScript type definitions (entities, config)
+│   ├── services/             # Business logic (borrowers, media, loans, discovery, audit-log)
+│   ├── utils/                # Shared helpers (resource boxes)
+│   ├── ui/                   # Main web app UI
+│   │   ├── webapp.ts         # doGet entry point
+│   │   └── html/             # HTML templates (App.html, AppJS.html, Styles.html)
+│   ├── admin/                # Admin sync app (separate GAS project)
+│   │   ├── ingest/           # .xlsx upload → parsed Master / Register rows
+│   │   ├── detector/         # Reconciliation: matching, kinship, spelling, rules
+│   │   ├── contacts/         # Gmail Contacts projection (planner + People API)
+│   │   ├── schedule/         # Class-schedule Doc generation
+│   │   ├── catalogue/        # Library catalogue Doc generation
+│   │   ├── borrower-sync.ts  # Borrowers sheet write-back
+│   │   └── html/Admin.html   # Admin UI (single page)
+│   ├── test/                 # Jest setup + GAS mocks
+│   ├── gas-entry.ts          # Main app's global function exports (client-callable)
+│   └── admin-entry.ts        # Admin app's global function exports
+├── dist/                     # Main app build output (auto-generated, pushed to GAS)
+├── dist-admin/               # Admin app build output (auto-generated)
+├── build.js                  # Build script (esbuild; `node build.js main|admin`)
+├── package.json              # Dependencies, scripts, and the two deployment IDs
+├── tsconfig.json             # TypeScript configuration
+├── appsscript.json           # Main app manifest (web app + OAuth scopes)
+└── appsscript.admin.json     # Admin app manifest (adds contacts/Drive/Docs scopes)
 ```
 
 > Client-side JS in `AppJS.html` calls server functions via `google.script.run`. Any new server function in `gas-entry.ts` must be exported onto `globalThis` (see the bindings at the bottom of the file) or the client cannot call it.
@@ -184,7 +199,7 @@ ccb-admin/
 ### "Access denied" / "Could not access master spreadsheet"
 
 - Confirm the user is shared on the relevant master spreadsheet (editor access for writes).
-- In the editor, run `showConfig()` to confirm the master spreadsheet IDs are set; if not, run `runDiscovery()`.
+- In the editor, run `showConfig()` to confirm the master spreadsheet IDs are set; if not, run `setMasterSpreadsheetIdsFromConstants()`.
 
 ### Web app doesn't appear or shows stale content
 

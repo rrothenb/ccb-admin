@@ -34,13 +34,6 @@ import { previewContactProjection, applyContactProjection } from './admin/contac
 
 import { previewBorrowerWrites, applyBorrowerWrites } from './admin/borrower-sync';
 
-import {
-  contactsSpike_listManaged,
-  contactsSpike_syncDryRun,
-  contactsSpike_syncApply,
-  contactsSpike_teardown,
-} from './admin/contacts-spike';
-
 import { doGet, include } from './admin/webapp';
 
 // ============================================================================
@@ -130,9 +123,3 @@ function clearConfig(): void {
 // Borrowers write-back (add missing members + update expiries)
 (globalThis as Record<string, unknown>).previewBorrowerWrites = previewBorrowerWrites;
 (globalThis as Record<string, unknown>).applyBorrowerWrites = applyBorrowerWrites;
-
-// Contacts spike (People API risk retirement)
-(globalThis as Record<string, unknown>).contactsSpike_listManaged = contactsSpike_listManaged;
-(globalThis as Record<string, unknown>).contactsSpike_syncDryRun = contactsSpike_syncDryRun;
-(globalThis as Record<string, unknown>).contactsSpike_syncApply = contactsSpike_syncApply;
-(globalThis as Record<string, unknown>).contactsSpike_teardown = contactsSpike_teardown;

@@ -9,6 +9,7 @@
 
 import {
   discoverAllMasterSpreadsheets,
+  setMasterSpreadsheetIds,
   getMasterConfig,
   clearMasterConfig,
 } from './services/discovery';
@@ -33,8 +34,48 @@ import { containingBoxOf, soleContainingBoxOf, unboxedBarcodes } from './utils/b
 // ============================================================================
 
 /**
+ * The three master spreadsheets, for `setMasterSpreadsheetIds()` below.
+ *
+ * Paste each spreadsheet's id (or just its URL — either works) here before
+ * running that function. This is how a NEW deployment is configured: see the
+ * comment on the function for why discovery can't do it in this project.
+ */
+const MASTER_SPREADSHEETS = {
+  borrowers: '',
+  media: '',
+  loans: '',
+};
+
+/**
+ * Points this project at the three master spreadsheets listed in
+ * MASTER_SPREADSHEETS above. Run it once from the editor after deploying to a
+ * new account — this is the primary setup step for the main app.
+ *
+ * Why not `runDiscovery()`: this app's manifest carries no Drive scope on
+ * purpose (so a volunteer signing in is only ever asked for Sheets), and
+ * discovery searches Drive — it throws "You do not have permission to call
+ * DriveApp.searchFiles" here. The admin project, which does hold the Drive
+ * scope, can still use discovery. See MIGRATION.md.
+ */
+function setMasterSpreadsheetIdsFromConstants(): void {
+  const result = setMasterSpreadsheetIds(MASTER_SPREADSHEETS);
+  if (result.success && result.data) {
+    Logger.log(`Master spreadsheets set:\n${result.data.map((s) => `- ${s}`).join('\n')}`);
+    Logger.log('Run showConfig() to confirm, then open the web app.');
+  } else {
+    Logger.log(
+      `Nothing set: ${result.error || 'unknown error'}\n` +
+        'Fill in MASTER_SPREADSHEETS at the top of gas-entry.ts (ids or Sheets URLs), redeploy, and run this again.'
+    );
+  }
+}
+
+/**
  * Runs the master spreadsheet discovery process
  * Run this from the Apps Script editor after initial deployment
+ *
+ * NOTE: needs a Drive scope, which this project's manifest does not grant —
+ * prefer `setMasterSpreadsheetIdsFromConstants()`. See MIGRATION.md.
  */
 function runDiscovery(): void {
   const result = discoverAllMasterSpreadsheets();
@@ -57,7 +98,10 @@ function showConfig(): void {
   const config = getMasterConfig();
 
   if (!config) {
-    Logger.log('No Configuration - No master spreadsheets configured. Run runDiscovery() first.');
+    Logger.log(
+      'No Configuration - No master spreadsheets configured. ' +
+        'Fill in MASTER_SPREADSHEETS and run setMasterSpreadsheetIdsFromConstants() first.'
+    );
     return;
   }
 
@@ -771,6 +815,7 @@ function logUserError(message: string): void {
 
 // Setup functions
 (globalThis as Record<string, unknown>).runDiscovery = runDiscovery;
+(globalThis as Record<string, unknown>).setMasterSpreadsheetIdsFromConstants = setMasterSpreadsheetIdsFromConstants;
 (globalThis as Record<string, unknown>).showConfig = showConfig;
 (globalThis as Record<string, unknown>).clearConfig = clearConfig;
 

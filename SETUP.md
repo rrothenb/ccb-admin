@@ -2,6 +2,11 @@
 
 Complete setup instructions for deploying the Freedom web application.
 
+> Moving an existing deployment to a different Google account? Follow
+> **[MIGRATION.md](MIGRATION.md)** instead — it covers the same steps plus the
+> things that don't travel (Contacts history, website PDF links, deployment ids).
+> The admin sync tool has its own guide: **[SETUP-admin.md](SETUP-admin.md)**.
+
 ## Prerequisites
 
 - **Node.js 18+** and npm
@@ -69,15 +74,17 @@ npx clasp create --type standalone --title "Freedom"
 
 This creates a `.clasp.json` file with your script ID.
 
-### 5. Build and Deploy the Code
+### 5. Build and Push the Code
 
 ```bash
-npm run deploy
+npm run push
 ```
 
-This command compiles and bundles the TypeScript with esbuild, pushes to Apps Script, and updates the versioned web-app deployment.
+This compiles and bundles the TypeScript with esbuild and uploads it to your Apps Script project.
 
-> Use `npm run push` only for editor-side testing — it uploads the code but does **not** update the served web-app version. `npm run deploy` is what actually ships a change to users.
+> **On a brand-new project, use `push` here, not `deploy`.** `npm run deploy` ends in `clasp deploy --deploymentId AKfycbx…`, an id baked into `package.json` that belongs to an *existing* deployment. In a new project that id doesn't exist and the command fails. Create the deployment in step 8, pin its id in `package.json`, and `npm run deploy` works from then on.
+
+Once that's done, the rule is: `npm run deploy` ships a change to users; `npm run push` only updates the editor copy and leaves the served version alone.
 
 ### 6. Configure in Apps Script Editor
 
@@ -89,25 +96,29 @@ npx clasp open
 
 Run the following from the editor (select the function in the dropdown and click **Run**, or call it from the execution console).
 
-#### 6a. Discover Master Spreadsheets
+#### 6a. Point the App at the Master Spreadsheets
 
-```javascript
-runDiscovery()
+Edit the constants at the top of `src/gas-entry.ts` — each takes a spreadsheet ID or, just as well, the Sheets URL you copied from the address bar:
+
+```ts
+const MASTER_SPREADSHEETS = {
+  borrowers: '1AbC…',
+  media: '1DeF…',
+  loans: '1GhI…',
+};
 ```
 
-This searches your Drive for spreadsheets whose names start with "Borrowers", "Media", and "Loans", and stores their IDs in script properties.
+Push the change (`npm run push`), then run in the editor:
+
+```javascript
+setMasterSpreadsheetIdsFromConstants()
+```
 
 **First run:** you'll need to authorize the script:
 - Click "Review permissions" → choose your account
 - Click "Advanced" → "Go to Freedom (unsafe)" → "Allow"
 
-Check the execution log — you should see each of the three spreadsheets found.
-
-**If discovery fails:**
-- Make sure all 3 spreadsheets exist and are named correctly (start with the exact prefix)
-- Verify they're not in the trash
-- Confirm you're logged into the correct Google account
-- Make sure the spreadsheets are in (or shared into) the deploying account's Drive
+> **Why not `runDiscovery()`?** It exists, and it finds the spreadsheets by name — but it searches Drive, and this app's manifest deliberately carries **no Drive scope** so that volunteers signing in are only ever asked for Sheets access. Called here it throws *"You do not have permission to call DriveApp.searchFiles"*. If you want name-based discovery anyway, [MIGRATION.md](MIGRATION.md#appendix-using-discovery-in-the-main-app) has the temporary-scope recipe. The admin project holds the Drive scope and uses `runDiscovery()` normally.
 
 #### 6b. (Optional) Enable Audit Logging
 
@@ -117,13 +128,15 @@ setAuditLogSpreadsheetId()
 
 Records the audit-log spreadsheet ID in script properties so write actions (checkouts, returns, edits, deletions) are appended to it.
 
+The ID itself is the `DEFAULT_AUDIT_LOG_SPREADSHEET_ID` constant in `src/services/audit-log.ts` — the function takes no arguments, so a new installation either shares that spreadsheet with the deploying account or edits the constant and redeploys. That same constant is the fallback both projects use when the property isn't set, so the account **must** be able to open it: if it can't, write actions fail with "Access denied to the Audit Log spreadsheet" rather than skipping the log.
+
 #### 6c. Verify Configuration
 
 ```javascript
 showConfig()
 ```
 
-Confirms the Borrowers, Media, and Loans IDs are set. If any are "(not set)", re-run `runDiscovery()`.
+Confirms the Borrowers, Media, and Loans IDs are set. If any are "(not set)", check the constants in step 6a and run it again.
 
 ### 7. Initialize Headers (Optional)
 
@@ -142,7 +155,7 @@ You can also add these headers manually if you prefer.
 
 ### 8. Deploy as Web App
 
-If you haven't already created the deployment (step 5 uses an existing deployment ID baked into the `deploy` script), create one in the editor:
+Create the deployment in the editor:
 
 1. In the Apps Script editor, click **Deploy → New deployment**
 2. Click the gear next to "Select type" and choose **Web app**
@@ -150,16 +163,20 @@ If you haven't already created the deployment (step 5 uses an existing deploymen
    - **Description:** "Freedom v1" (or your preference)
    - **Execute as:** **User accessing the web app**
    - **Who has access:** **Anyone with a Google account**
-4. Click **Deploy** and copy the web app URL:
+4. Click **Deploy**, then copy **both** the web app URL and the deployment ID:
    ```
    https://script.google.com/macros/s/AKfycby.../exec
    ```
+5. Paste the deployment ID into `package.json`, replacing the one in `deploy:main`:
+   ```
+   "deploy:main": "npm run build:main && clasp push --force && clasp deploy --deploymentId <YOUR_ID>"
+   ```
+
+From now on `npm run deploy` updates *this* deployment, so the URL never changes under your users.
 
 **Important:**
 - **Execute as: User accessing** means each request runs under that user's own permissions, so the user must be shared on the master spreadsheets.
 - **Who has access: Anyone with a Google account** lets anyone open the URL, but they can only read/write data they've been shared on.
-
-> The repo's `npm run deploy` updates a specific existing deployment (its ID is in `package.json`). If you create your own deployment, update that ID so `npm run deploy` targets it.
 
 ### 9. Share and Test
 
@@ -175,19 +192,21 @@ If you haven't already created the deployment (step 5 uses an existing deploymen
 
 ## Development vs. Production Environments
 
-The system discovers spreadsheets by name in the currently logged-in Google account. To maintain separate environments:
+Each Apps Script project stores its own spreadsheet IDs, so an environment is a project plus the sheets you point it at. To maintain separate environments:
 
 ### For Development
 1. Log in with your dev account: `npx clasp login`
 2. Create dev spreadsheets: "Borrowers Dev", "Media Dev", "Loans Dev"
 3. Create a dev Apps Script project
-4. Run discovery and deploy
+4. Point it at the dev sheets (step 6a) and deploy
 
 ### For Production
 1. Log in with the production account: `npx clasp login`
 2. Create production spreadsheets: "Borrowers", "Media", "Loans"
 3. Create a production Apps Script project
-4. Run discovery and deploy
+4. Point it at the production sheets (step 6a) and deploy
+
+Each project also needs its own deployment ID in `package.json` — see step 8.
 
 ### Managing Multiple Environments
 
@@ -215,14 +234,17 @@ After switching, run `npm run deploy` to ship to that environment.
 
 These functions are available in the Apps Script editor:
 
+### `setMasterSpreadsheetIdsFromConstants()`
+Stores the three IDs from the `MASTER_SPREADSHEETS` block at the top of `src/gas-entry.ts`. This is how the main app is configured — at setup, and again whenever you switch to a different set of sheets. Blank entries are left alone, so you can repoint one sheet without touching the others.
+
 ### `runDiscovery()`
-Searches for master spreadsheets and updates configuration. Run this if you renamed a master spreadsheet, want to switch to a different set, or discovery failed during setup.
+Finds the master spreadsheets by name and stores their IDs. **Needs a Drive scope this project doesn't grant** — use it in the admin project, not here. See step 6a.
 
 ### `showConfig()`
-Displays current configuration (master spreadsheet IDs and last discovery date).
+Displays current configuration (master spreadsheet IDs and when they were last set).
 
 ### `clearConfig()`
-Clears the stored master spreadsheet configuration. Use this to start over before re-running discovery.
+Clears the stored master spreadsheet configuration. Use this to start over.
 
 ### `setAuditLogSpreadsheetId()` / `getAuditLogSpreadsheetId()`
 Enable audit logging / read back the configured audit-log spreadsheet ID.
@@ -237,16 +259,23 @@ Adds column headers to all master spreadsheets. Safe to run when sheets are empt
 2. Complete authentication in the browser
 3. Retry your command
 
-### "Could not find spreadsheet(s)" during discovery
-1. Verify all 3 spreadsheets exist in Google Drive
-2. Check they're named correctly (starting with "Borrowers", "Media", "Loans")
-3. Make sure they're not in the trash
-4. Verify you're logged into the correct account: `npx clasp login`
-5. Run `runDiscovery()` again
+### "You do not have permission to call DriveApp.searchFiles"
+You ran `runDiscovery()` in the main project. It needs a Drive scope the manifest deliberately omits — use `setMasterSpreadsheetIdsFromConstants()` instead (step 6a).
+
+### `showConfig()` says "(not set)" after configuring
+1. Check the IDs really are filled in in `MASTER_SPREADSHEETS` (`src/gas-entry.ts`)
+2. Make sure you pushed the edit (`npm run push`) before running the function — the editor runs the *pushed* code, not your working copy
+3. Run `setMasterSpreadsheetIdsFromConstants()` again and read the log it prints
 
 ### "Access denied" / "Could not access master spreadsheet" runtime error
 - The signed-in user isn't shared on that master spreadsheet (or only has view access for a write).
-- Share the spreadsheet with the user (editor for writes), or run `showConfig()` / `runDiscovery()` if the configured IDs are wrong.
+- Share the spreadsheet with the user (editor for writes), or run `showConfig()` to check the configured IDs are the ones you meant.
+
+### "Access denied to the Audit Log spreadsheet"
+The account can't open the audit-log sheet (see step 6b). Share it with that account as **editor** — logging isn't best-effort, so this failure surfaces to the user mid-action.
+
+### "Deployment not found" from `npm run deploy`
+`package.json` still holds a deployment ID from another project or account. Create a deployment (step 8) and pin its ID.
 
 ### Changes to code not appearing
 1. Make sure you ran `npm run deploy` (not just `npm run push`)
@@ -280,6 +309,8 @@ This is normal for personal projects that haven't gone through Google's verifica
 - Check the logs: `npx clasp logs`
 - Review the code: `npx clasp open`
 - See [README.md](README.md) for the architecture overview
+- Moving accounts: [MIGRATION.md](MIGRATION.md)
+- The admin sync tool: [SETUP-admin.md](SETUP-admin.md)
 
 ## License
 

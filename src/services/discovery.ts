@@ -111,6 +111,55 @@ function discoverAllMasterSpreadsheets(): OperationResult<DiscoveryResult[]> {
 }
 
 /**
+ * Sets the master spreadsheet IDs by hand, without searching Drive.
+ *
+ * This is the setup path for the MAIN app, because its manifest deliberately
+ * carries no Drive scope — that's what keeps volunteers' consent screen down to
+ * Sheets — and `discoverAllMasterSpreadsheets()` therefore cannot run there
+ * (DriveApp.searchFiles would throw). Spelling the three IDs out also removes
+ * discovery's one sharp edge: it takes the NEWEST name match, so an old copy of
+ * "Borrowers" sitting in the account's Drive can silently win.
+ *
+ * Accepts either a bare spreadsheet ID or a full Google Sheets URL, so the
+ * operator can paste straight from the address bar. Blank entries are left
+ * untouched rather than cleared, so one sheet can be repointed on its own.
+ */
+function setMasterSpreadsheetIds(ids: { borrowers?: string; media?: string; loans?: string }): OperationResult<string[]> {
+  const props = PropertiesService.getScriptProperties();
+  const set: string[] = [];
+  const pairs: [SheetName, string | undefined][] = [
+    ['Borrowers', ids.borrowers],
+    ['Media', ids.media],
+    ['Loans', ids.loans],
+  ];
+
+  for (const [sheetName, raw] of pairs) {
+    const id = extractSpreadsheetId(raw || '');
+    if (!id) continue;
+    const propKey = getPropertyKeyForSheet(sheetName);
+    if (propKey) {
+      props.setProperty(propKey, id);
+      set.push(`${sheetName}: ${id}`);
+    }
+  }
+
+  if (set.length === 0) {
+    return { success: false, error: 'No spreadsheet IDs given — nothing was changed.' };
+  }
+
+  props.setProperty(PROPERTY_KEYS.LAST_DISCOVERY_DATE, new Date().toISOString());
+  return { success: true, data: set };
+}
+
+/** Pulls the id out of a Sheets URL, or returns a bare id unchanged. */
+function extractSpreadsheetId(raw: string): string {
+  const s = (raw || '').trim();
+  if (!s) return '';
+  const m = s.match(/\/d\/([a-zA-Z0-9-_]+)/);
+  return m ? m[1] : s;
+}
+
+/**
  * Gets the property key for a given sheet name
  */
 function getPropertyKeyForSheet(sheetName: SheetName): string | null {
@@ -203,6 +252,7 @@ function clearMasterConfig(): void {
 export {
   findNewestSpreadsheetByPrefix,
   discoverAllMasterSpreadsheets,
+  setMasterSpreadsheetIds,
   getMasterSpreadsheetId,
   getMasterConfig,
   openMasterSpreadsheet,
