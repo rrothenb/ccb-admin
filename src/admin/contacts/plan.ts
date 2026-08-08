@@ -6,6 +6,7 @@
  *
  *   26/27                          — everyone in this school year
  *   26/27 Class 10 Paula           — one class in this school year
+ *   26/27 Teacher Paula            — a teacher's CURRENT students
  *   Level U Intermediate (B2+)     — a level, across all years
  *   Teacher Paula                  — a teacher, across all years
  *
@@ -56,6 +57,19 @@ export function yearClassLabel(year: string, classNumber: string, teacher: strin
   return teacher.trim() ? `${base} ${teacher.trim()}` : base;
 }
 
+/**
+ * A teacher's students THIS year — "26/27 Teacher Paula".
+ *
+ * The cross-year "Teacher Paula" below accumulates everyone who has ever been
+ * taught by her, which is the wrong list for "Paula is out sick today". This is
+ * that list: it spans her classes (a teacher can have several) but only within
+ * the current year, so it retires into history at the year boundary exactly like
+ * the class labels do.
+ */
+export function yearTeacherLabel(year: string, teacher: string): string {
+  return `${year.trim()} Teacher ${teacher.trim()}`;
+}
+
 // Cross-year labels: a level or a teacher accumulates every member who has ever
 // been taught at/by it, which is exactly what makes them useful alongside the
 // year labels ("everyone who's ever been Intermediate").
@@ -65,7 +79,7 @@ export const levelLabel = (l: string): string => `Level ${normalizeLevel(l)}`;
 /** True for a label this projection generates for `year` — used to spot stale year labels. */
 export function isYearLabel(name: string, year: string): boolean {
   const y = year.trim();
-  return name === y || name.startsWith(`${y} Class `);
+  return name === y || name.startsWith(`${y} Class `) || name.startsWith(`${y} Teacher `);
 }
 
 /**
@@ -238,7 +252,12 @@ export function buildDesiredContacts(
       const info = classInfo.get(cls);
       const teacher = (info && info.teacher) || '';
       if (year.trim()) labels.add(yearClassLabel(year, cls, teacher));
-      if (teacher) labels.add(teacherLabel(teacher));
+      if (teacher) {
+        labels.add(teacherLabel(teacher));
+        // …and the same teacher scoped to this year, so "everyone Paula teaches
+        // right now" is a label of its own rather than a list of her alumni.
+        if (year.trim()) labels.add(yearTeacherLabel(year, teacher));
+      }
       if (info && info.level) labels.add(levelLabel(info.level));
     }
     const { family, given } = splitName(m.name);

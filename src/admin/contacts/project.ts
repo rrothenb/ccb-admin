@@ -3,7 +3,8 @@
  *
  * Projects current members into the master account's Contacts, labelled the way
  * the org already labels them: "26/27" and "26/27 Class 10 Paula" for this school
- * year, plus cross-year "Level …" / "Teacher …". Reuses the pure planner (plan.ts)
+ * year and "26/27 Teacher Paula" for her current students, plus cross-year
+ * "Level …" / "Teacher …". Reuses the pure planner (plan.ts)
  * for the diff and the People API calls proven by the spike.
  *
  * Who "current members" are is decided by the same reconciliation as every other

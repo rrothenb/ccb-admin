@@ -35,8 +35,12 @@ describe('isYearLabel', () => {
     expect(isYearLabel('26/27', '26/27')).toBe(true);
     expect(isYearLabel('26/27 Class 10 Paula', '26/27')).toBe(true);
   });
+  it('matches this year\'s teacher label too', () => {
+    expect(isYearLabel('26/27 Teacher Paula', '26/27')).toBe(true);
+  });
   it('does not match another year, a cross-year label, or a personal one', () => {
     expect(isYearLabel('25/26 Class 10 Paula', '26/27')).toBe(false);
+    expect(isYearLabel('25/26 Teacher Paula', '26/27')).toBe(false);
     expect(isYearLabel('Level Intermediate', '26/27')).toBe(false);
     expect(isYearLabel('Teacher Paula', '26/27')).toBe(false);
     expect(isYearLabel('Family', '26/27')).toBe(false);
@@ -148,10 +152,33 @@ describe('membersForContact', () => {
 describe('buildDesiredContacts', () => {
   const info = new Map([['1', { teacher: 'Hannah', level: 'Intermediate' }]]);
 
-  it("follows the org's own label pattern: year, year-class-teacher, level, teacher", () => {
+  it("follows the org's own label pattern: year, year-class-teacher, year-teacher, level, teacher", () => {
     const [d] = buildDesiredContacts([member()], info, '26/27');
     expect(d.email).toBe('marie@ex.fr');
-    expect(d.labels).toEqual(['26/27', '26/27 Class 1 Hannah', 'Level Intermediate', 'Teacher Hannah']);
+    expect(d.labels).toEqual([
+      '26/27',
+      '26/27 Class 1 Hannah',
+      '26/27 Teacher Hannah',
+      'Level Intermediate',
+      'Teacher Hannah',
+    ]);
+  });
+
+  // "Paula is out sick" goes to the people she teaches NOW; "Teacher Paula" is
+  // everyone she has ever taught, and stays that way.
+  it("gives a teacher a current-year label distinct from their all-time one", () => {
+    const paula = new Map([['10', { teacher: 'Paula', level: 'Intermediate' }]]);
+    const [d] = buildDesiredContacts([member({ classNumbers: ['10'] })], paula, '26/27');
+    expect(d.labels).toContain('26/27 Teacher Paula');
+    expect(d.labels).toContain('Teacher Paula');
+  });
+
+  // One label per teacher, not per class: a teacher with two of a member's
+  // classes must not produce a duplicate.
+  it('emits one year-teacher label for a teacher who takes two of the member\'s classes', () => {
+    const both = new Map([['11', { teacher: 'Hannah', level: 'Advanced (C1)' }], ['12', { teacher: 'Hannah', level: 'Advanced (C1)' }]]);
+    const [d] = buildDesiredContacts([member({ classNumbers: ['11 & 12'] })], both, '26/27');
+    expect(d.labels.filter((l) => l === '26/27 Teacher Hannah')).toHaveLength(1);
   });
 
   it('matches the example label they already use by hand', () => {
@@ -172,6 +199,8 @@ describe('buildDesiredContacts', () => {
       '26/27',
       '26/27 Class 11 Hannah',
       '26/27 Class 12 Ben',
+      '26/27 Teacher Ben',
+      '26/27 Teacher Hannah',
       'Level Advanced (C1)',
       'Level Intermediate',
       'Teacher Ben',
