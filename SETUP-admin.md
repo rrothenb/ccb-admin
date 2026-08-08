@@ -48,12 +48,13 @@ Master contacts account (interim, for acceptance testing): `bigdeadbob@gmail.com
 owns this project.
 
 > **Going live is an account move.** Contacts are written to the **executing
-> user's** account, so the production project must be created under the real
-> contact-holder account — and the alumni labels built up in the interim account
-> do **not** come with it. Follow **[MIGRATION.md](MIGRATION.md)**, which covers
-> the Contacts export/import and the fact that the catalogue/schedule PDF links
-> change. Don't run the Contacts projection in the new account until the import
-> is verified.
+> user's** account, so the real contact-holder account has to be the one opening
+> this app — and the alumni labels built up in the interim account do **not**
+> come with it. Follow **[MIGRATION.md](MIGRATION.md)**: transferring ownership
+> of the script project keeps the URL, the configuration, and the website's PDF
+> links intact, while recreating the project changes all three. Either way, do
+> the Contacts export/import first, and don't run the projection in the new
+> account until it's verified.
 
 ## First-run configuration (one-time, in the admin editor)
 

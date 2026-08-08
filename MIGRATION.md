@@ -1,33 +1,113 @@
 # Moving to a different Google account
 
-How to stand both Apps Script projects up in a new account — the production
-move, or a rebuild after an account is lost. Written to be followed top to
-bottom; the ordering matters in a few places and those are called out.
+Two ways to do this:
+
+- **[Route A — transfer ownership](#route-a--transfer-ownership)** (preferred).
+  Hand the existing Drive files to the new account. The web app URLs, the
+  configuration, and the website's PDF links all survive.
+- **[Route B — recreate from scratch](#route-b--recreate-from-scratch)**. New
+  projects, new deployments, new everything. Use this when transfer isn't
+  available, or when rebuilding after an account is lost.
+
+Whichever route, [the Gmail Contacts move](#the-gmail-contacts-move-both-routes)
+is the same and has to be done by hand.
 
 For a first-time setup that isn't a move, [SETUP.md](SETUP.md) (main app) and
 [SETUP-admin.md](SETUP-admin.md) (admin app) cover the same ground with more
 explanation.
 
-## What is tied to the account (and therefore has to be redone)
+## What actually has to move
 
-Nothing in the repo knows about the old account except two deployment ids in
-`package.json`. Everything else that's account-bound lives in Google:
+Neither app runs as its owner — both deploy with `executeAs: USER_ACCESSING`.
+So "the app is in the wrong account" is three separate questions, and only the
+last one is a hard requirement:
 
-| Thing | Where it lives | On a new account |
+| | Who it has to be | Why |
 |---|---|---|
-| Script ids (both projects) | `.clasp.json`, `.clasp.admin.json` (gitignored) | Recreated by `clasp create` |
-| Deployment ids (both) | pinned in `package.json`'s `deploy:main` / `deploy:admin` | **Must be replaced by hand** |
-| Web app URLs | derived from the deployment ids | **Change** — everyone needs the new link |
-| Master spreadsheet ids | script properties, per project | Re-set in each project (they don't share a store) |
-| Audit-log spreadsheet id | `DEFAULT_AUDIT_LOG_SPREADSHEET_ID` in `src/services/audit-log.ts` | Share the sheet with the new account, or edit the constant |
-| Catalogue / schedule Doc ids | admin project's script properties | Regenerated on first run — **the PDF links on the website change** |
-| Gmail Contacts + their labels | the account's own Contacts | **Do not follow the code.** Export/import if you want the history |
-| OAuth grants | the account | Re-consented on first run of each project |
+| Who owns the **code** | anybody | The owner is only who can edit and deploy. No runtime role. |
+| Who owns the **spreadsheets** | anybody, as long as the volunteers are shared | Reads and writes run as the signed-in volunteer. |
+| Whose **Contacts** are written | the account that opens the **admin** app | The People API writes to the executing user. |
 
-Two of those bite quietly: the **website PDF links** and the **Contacts
-history**. Both have their own steps below.
+If the goal is purely that the right account holds the members' contact
+details, only the admin app strictly has to move. Moving the main app too is a
+tidiness decision — a good one for handover, but not a functional requirement.
 
-## Before you start
+## Which route can you take?
+
+Ownership transfer is Google's feature, not this project's, and availability
+depends on the account types:
+
+| From → to | Transfer? |
+|---|---|
+| Same Workspace domain | Yes, for everything |
+| Different Workspace domains | **No** — cross-domain transfer is blocked. Route B. |
+| Consumer Gmail → consumer Gmail | Yes for Google-native file types; check the script projects specifically |
+
+**Check it in thirty seconds:** open the Apps Script project's file in Drive,
+click Share, add the target account, and look at the role dropdown. If
+"Transfer ownership" is offered, Route A is open. If it isn't, take Route B.
+
+### What survives a transfer
+
+Script properties, script ids, and deployment ids belong to the **script
+project**, not to the account — so transferring the file carries them along.
+
+| Thing | Route A (transfer) | Route B (recreate) |
+|---|---|---|
+| Web app URLs | **Survive** — nobody needs a new link | Change; everyone needs the new link |
+| Deployment ids in `package.json` | Unchanged | **Must be replaced by hand** |
+| Master spreadsheet ids (script properties) | **Survive** | Re-set in each project (they don't share a store) |
+| Audit-log spreadsheet id | Survives; transfer or share the sheet too | Share the sheet, or edit `DEFAULT_AUDIT_LOG_SPREADSHEET_ID` |
+| Catalogue / schedule Doc ids | **Survive — the website's PDF links keep working** | New Docs, new URLs; the website needs updating |
+| Your local clasp workflow | Keeps working — an *editor* can push, owner or not | New `.clasp*.json` files |
+| Gmail Contacts + their labels | **Do not transfer.** Account data, not project data | Same — export/import |
+| OAuth grants | Per user; re-consented on first run | Same |
+
+The one row that no route helps with is Contacts. It has
+[its own section](#the-gmail-contacts-move-both-routes).
+
+## Route A — transfer ownership
+
+Do the transfers from the **old** account, in Drive's share dialog for each
+file ("Transfer ownership"). The new account has to accept each one.
+
+1. **The two script projects** — "Freedom" and "CCB Admin Sync". Keep the old
+   account on as an **editor** so you can still `clasp push` from your laptop.
+2. **The three master spreadsheets** — Borrowers, Media, Loans.
+3. **The audit-log spreadsheet.**
+4. **The generated Docs** — the catalogue Docs and the class-schedule Doc. This
+   is what keeps the website's PDF links alive; skip it and those links break
+   the first time the admin app can't open the old Doc.
+5. **Check the main app.** Open its web app URL (unchanged) and confirm the
+   roster loads and a checkout works. Nothing should have moved.
+6. **Check the admin app.** Have the **new** account open the admin URL. It's
+   deployed "Only myself", which resolves to whoever published it — if the new
+   owner is refused, have them do **Deploy → New deployment** in the editor
+   (Execute as: *User accessing*, Access: *Only myself*) and pin that new
+   deployment id in `package.json`'s `deploy:admin`. That's the one id that may
+   still change on this route.
+7. **Run the Contacts import** —
+   [see below](#the-gmail-contacts-move-both-routes) — before running the
+   Contacts projection.
+8. **Verify** with the [checklist](#verification-checklist), skipping the rows
+   about new URLs and ids.
+
+Then, once you're happy: sign the old account out of anything shared, and keep
+its Contacts until the import is confirmed. There's nothing to decommission —
+the deployments are the same ones, now owned by the right account.
+
+> **Don't copy instead of transferring.** A *copy* of a master spreadsheet
+> leaves two live sets, and the app points at one by id — the wrong one can be
+> edited by mistake for weeks before anyone notices. Transfer, and there is only
+> ever one.
+
+## Route B — recreate from scratch
+
+Everything below is the rebuild path: new projects, new deployments, new
+configuration. Follow it top to bottom — the ordering matters in a few places
+and those are called out.
+
+### Before you start
 
 Have ready:
 
@@ -43,7 +123,7 @@ Have ready:
 > before anyone notices. Transfer ownership (Sheets → Share → the new account →
 > "Transfer ownership") and there is only ever one.
 
-## 1. Switch clasp to the new account
+### 1. Switch clasp to the new account
 
 ```bash
 npx clasp logout
@@ -53,7 +133,7 @@ npx clasp login          # sign in as the NEW account
 Both projects push from whichever account clasp is currently logged in as —
 there is no per-project login.
 
-## 2. Main app: create the project
+### 2. Main app: create the project
 
 ```bash
 mv .clasp.json .clasp.old.json 2>/dev/null    # keep the old one if you still want it
@@ -66,7 +146,7 @@ npm run push                                   # push code — NOT `npm run depl
 account's deployment. In a brand-new project that id doesn't exist and the
 command fails. You create the deployment first (next step), then pin its id.
 
-## 3. Main app: create the web-app deployment and pin its id
+### 3. Main app: create the web-app deployment and pin its id
 
 In the Apps Script editor (`npx clasp open`):
 
@@ -83,7 +163,7 @@ Then edit `package.json` and replace the id in `deploy:main`:
 
 From here on `npm run deploy` works normally and keeps the URL stable.
 
-## 4. Main app: point it at the master spreadsheets
+### 4. Main app: point it at the master spreadsheets
 
 Open `src/gas-entry.ts`, fill in the ids (or paste the Sheets URLs — either
 works) at the top:
@@ -110,7 +190,7 @@ with **`showConfig()`** — all three ids should be listed.
 
 If the master sheets are empty, run **`initializeAllHeaders()`** now.
 
-## 5. Main app: audit logging
+### 5. Main app: audit logging
 
 The audit-log spreadsheet id is a constant in `src/services/audit-log.ts`, used
 as the default for both projects. Either:
@@ -126,7 +206,7 @@ Then run **`setAuditLogSpreadsheetId()`** in the editor and check with
 If the account can't open that sheet, every write action fails with "Access
 denied to the Audit Log spreadsheet" — logging is not best-effort here.
 
-## 6. Main app: share and hand out the new URL
+### 6. Main app: share and hand out the new URL
 
 1. Share Borrowers, Media, and Loans with each volunteer (**editor** for the
    desk, **viewer** for read-only). Access is nothing but this sharing.
@@ -134,7 +214,7 @@ denied to the Audit Log spreadsheet" — logging is not best-effort here.
    deployment. Bookmarks, the website, and any printed cards all need updating.
 3. Have one volunteer who is *not* you open it and do a checkout and a return.
 
-## 7. Admin app: create the project
+### 7. Admin app: create the project
 
 The admin app is a second, separate Apps Script project — same repo, same
 source, different entry point and manifest. It holds the Contacts/Drive scopes
@@ -167,7 +247,7 @@ In the editor (`npm run open:admin`), confirm the web app settings:
 **Execute as: User accessing**, **Who has access: Only myself**. This URL should
 never be given to anyone.
 
-## 8. Admin app: services and first-run configuration
+### 8. Admin app: services and first-run configuration
 
 1. **People API.** `appsscript.admin.json` declares the People and Drive
    advanced services, so pushing the manifest normally enables them. If a
@@ -182,9 +262,11 @@ never be given to anyone.
 The admin account needs read/write on **Borrowers** and **Media**, and edit on
 the **audit-log** sheet. Loans is not used by this project.
 
-## 9. Admin app: the Gmail Contacts move
+## The Gmail Contacts move (both routes)
 
-This is the step with no code path — worth reading before you run anything.
+This is the step with no code path and no shortcut — worth reading before you
+run anything. It applies just as much to Route A: ownership transfer moves
+*files*, and Contacts aren't a file.
 
 **The projection writes to the Contacts of whichever account is running it.** A
 new account starts with an empty address book, so the first run there will
@@ -208,21 +290,31 @@ So, before the first Contacts run in the new account:
 Because the projection only ever adds, a preview that looks wrong is safe to
 walk away from — nothing has been written.
 
-## 10. Admin app: the website PDF links
+## The website PDF links
 
 The catalogue and schedule generators keep the same Google Doc across runs
-(their ids live in this project's script properties) so the PDF export URLs on
-the website stay stable. A new project has no such properties, so the first run
-in the new account **creates new Docs with new ids and new URLs**.
+(their ids live in the admin project's script properties) so the PDF export
+URLs on the website stay stable.
+
+**Route A:** the properties travel with the project and the Docs were
+transferred in step 4, so the links keep working. Run **Generate catalogue**
+and **Generate schedule** once and confirm they rewrite the same Docs rather
+than creating new ones — if a Doc wasn't transferred, the generator can't open
+it, logs that, and silently creates a replacement with a new URL.
+
+**Route B:** a new project has no such properties, so the first run **creates
+new Docs with new ids and new URLs**.
 
 1. Run **Generate catalogue** and **Generate schedule** in the admin app.
 2. Copy the new PDF links it reports.
 3. Update the links on the website.
 4. Keep the old Docs until the new links are live and checked.
 
-## 11. Decommission the old account
+## Decommissioning the old account (Route B)
 
-Only after the new one is fully verified:
+On Route A there's nothing to decommission — the deployments are the same ones,
+now owned by the right account. On Route B, only after the new one is fully
+verified:
 
 - unshare the master spreadsheets from the old account (or leave viewer access
   for a grace period);
@@ -234,18 +326,20 @@ Only after the new one is fully verified:
 ## Verification checklist
 
 Work through this in the new account before telling anyone the move is done.
+The rows marked *(B)* only apply to the recreate route.
 
 - [ ] `showConfig()` in the **main** project lists all three spreadsheet ids
-- [ ] The web app opens at the new URL and the Members tab shows the roster
+- [ ] The web app opens (at the new URL, on Route B) and the Members tab shows the roster
 - [ ] A checkout, a return, and an extend all succeed from the desk
 - [ ] A volunteer who is *not* the owner can do the same
 - [ ] The audit-log sheet has rows from those actions, with the right emails
 - [ ] `showConfig()` in the **admin** project lists Borrowers and Media
+- [ ] The new account — not the old one — is the one that opens the admin app
 - [ ] Membership sync detection runs and reports a worklist
 - [ ] Borrowers preview shows a sane plan (and nothing 🛑 blocking)
 - [ ] Contacts preview shows mostly *label additions*, not mass creations
-- [ ] Catalogue and schedule generate, and the website links are updated
-- [ ] Both deployment ids in `package.json` are the new ones (`git diff`)
+- [ ] Catalogue and schedule rewrite their existing Docs (Route A) or the website links are updated *(B)*
+- [ ] Both deployment ids in `package.json` are the new ones (`git diff`) *(B)*
 
 ## Authorization warnings
 
